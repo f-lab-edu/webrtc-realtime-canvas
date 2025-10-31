@@ -17,7 +17,7 @@ A Next.js 16 application for 1:1 video chat with real-time whiteboard collaborat
 - **WebRTC**: SimplePeer
 - **Signaling**: Socket.io-client
 - **Canvas**: Fabric.js
-
+  
 ## Project Structure
 
 ```
@@ -36,7 +36,7 @@ A Next.js 16 application for 1:1 video chat with real-time whiteboard collaborat
 
 ### Prerequisites
 
-- Node.js 20+ 
+- Node.js 20+
 - npm or yarn
 
 ### Installation
@@ -82,6 +82,7 @@ npm run lint
 ## Implementation Status
 
 This project follows a spec-driven development approach. See `.kiro/specs/webrtc-1-to-1-communication/` for:
+
 - `requirements.md` - Feature requirements
 - `design.md` - System design
 - `tasks.md` - Implementation tasks
