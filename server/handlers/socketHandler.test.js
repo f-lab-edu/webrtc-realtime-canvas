@@ -42,9 +42,7 @@ describe("Socket 이벤트 핸들러", () => {
     it("유효한 방 ID로 참가하면 성공 응답을 보낸다", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const joinHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "room:join",
-      )[1];
+      const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 방 참가 이벤트 발생
       joinHandler("room-1");
@@ -63,9 +61,7 @@ describe("Socket 이벤트 핸들러", () => {
       roomManager.addParticipant("room-1", "user-2");
 
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const joinHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "room:join",
-      )[1];
+      const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 3번째 참가자가 입장 시도
       joinHandler("room-1");
@@ -78,9 +74,7 @@ describe("Socket 이벤트 핸들러", () => {
     it("유효하지 않은 방 ID로 참가하면 에러를 보낸다", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const joinHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "room:join",
-      )[1];
+      const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 유효하지 않은 방 ID로 참가 시도
       joinHandler(null);
@@ -97,9 +91,7 @@ describe("Socket 이벤트 핸들러", () => {
       // Given: 방에 참가한 상태
       roomManager.addParticipant("room-1", mockSocket.id);
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const leaveHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "room:leave",
-      )[1];
+      const leaveHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:leave")[1];
 
       // When: 방 퇴장 이벤트 발생
       leaveHandler("room-1");
@@ -114,9 +106,7 @@ describe("Socket 이벤트 핸들러", () => {
     it("offer를 대상 소켓에게 중계한다", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const offerHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "signal:offer",
-      )[1];
+      const offerHandler = mockSocket.on.mock.calls.find((call) => call[0] === "signal:offer")[1];
 
       // When: offer 이벤트 발생
       const offerData = {
@@ -136,9 +126,7 @@ describe("Socket 이벤트 핸들러", () => {
     it("유효하지 않은 데이터로 호출하면 에러를 보낸다", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const offerHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "signal:offer",
-      )[1];
+      const offerHandler = mockSocket.on.mock.calls.find((call) => call[0] === "signal:offer")[1];
 
       // When: 유효하지 않은 데이터로 호출
       offerHandler({ to: "target" }); // signal 누락
@@ -154,9 +142,7 @@ describe("Socket 이벤트 핸들러", () => {
     it("answer를 대상 소켓에게 중계한다", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const answerHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "signal:answer",
-      )[1];
+      const answerHandler = mockSocket.on.mock.calls.find((call) => call[0] === "signal:answer")[1];
 
       // When: answer 이벤트 발생
       const answerData = {
@@ -179,7 +165,7 @@ describe("Socket 이벤트 핸들러", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const iceHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "signal:ice-candidate",
+        (call) => call[0] === "signal:ice-candidate"
       )[1];
 
       // When: ICE candidate 이벤트 발생
@@ -203,7 +189,7 @@ describe("Socket 이벤트 핸들러", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const whiteboardHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "whiteboard:event",
+        (call) => call[0] === "whiteboard:event"
       )[1];
 
       // When: 화이트보드 이벤트 발생
@@ -228,7 +214,7 @@ describe("Socket 이벤트 핸들러", () => {
       // Given: Socket 핸들러가 등록됨
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const whiteboardHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "whiteboard:event",
+        (call) => call[0] === "whiteboard:event"
       )[1];
 
       // When: 유효하지 않은 데이터로 호출
@@ -245,14 +231,12 @@ describe("Socket 이벤트 핸들러", () => {
     it("연결이 끊어지면 자동으로 방에서 제거된다", () => {
       // Given: 방에 참가한 상태
       registerSocketHandlers(mockIo, mockSocket, roomManager);
-      const joinHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "room:join",
-      )[1];
+      const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
       joinHandler("room-1");
 
       // When: 연결 해제
       const disconnectHandler = mockSocket.on.mock.calls.find(
-        (call) => call[0] === "disconnect",
+        (call) => call[0] === "disconnect"
       )[1];
       disconnectHandler("client disconnect");
 

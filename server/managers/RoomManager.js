@@ -2,7 +2,7 @@
  * RoomManager 클래스
  * 방 생성, 조회, 참가자 관리를 담당하는 클래스
  */
-import { roomIdSchema, socketIdSchema } from '../schemas/socketSchemas.js';
+import { roomIdSchema, socketIdSchema } from "../schemas/socketSchemas.js";
 
 class RoomManager {
   constructor() {
@@ -16,7 +16,7 @@ class RoomManager {
     this.inactivityTimeout = 60000;
     // 타임아웃 체크 타이머
     this.timeoutTimer = null;
-    
+
     // 타임아웃 체크 시작
     this.startTimeoutCheck();
   }
@@ -40,12 +40,12 @@ class RoomManager {
       id: validatedRoomId,
       participants: new Set(),
       createdAt: new Date(),
-      maxParticipants: 2
+      maxParticipants: 2,
     };
 
     this.rooms.set(validatedRoomId, room);
     console.log(`방 생성됨: ${validatedRoomId}`);
-    
+
     return room;
   }
 
@@ -86,8 +86,10 @@ class RoomManager {
 
     // 참가자 추가
     room.participants.add(validatedSocketId);
-    console.log(`참가자 추가됨: ${validatedSocketId} -> 방: ${validatedRoomId}, 현재 인원: ${room.participants.size}`);
-    
+    console.log(
+      `참가자 추가됨: ${validatedSocketId} -> 방: ${validatedRoomId}, 현재 인원: ${room.participants.size}`
+    );
+
     return true;
   }
 
@@ -110,10 +112,12 @@ class RoomManager {
 
     // 참가자 제거
     const removed = room.participants.delete(validatedSocketId);
-    
+
     if (removed) {
-      console.log(`참가자 제거됨: ${validatedSocketId} <- 방: ${validatedRoomId}, 남은 인원: ${room.participants.size}`);
-      
+      console.log(
+        `참가자 제거됨: ${validatedSocketId} <- 방: ${validatedRoomId}, 남은 인원: ${room.participants.size}`
+      );
+
       // 방이 비어있으면 방 삭제
       if (room.participants.size === 0) {
         this.rooms.delete(validatedRoomId);
@@ -181,7 +185,7 @@ class RoomManager {
   updateParticipantActivity(socketId) {
     // Zod로 파라미터 검증
     const validatedSocketId = socketIdSchema.parse(socketId);
-    
+
     this.participantActivity.set(validatedSocketId, Date.now());
     console.log(`참가자 활동 시간 업데이트: ${validatedSocketId}`);
   }
@@ -193,7 +197,7 @@ class RoomManager {
   removeParticipantActivity(socketId) {
     // Zod로 파라미터 검증
     const validatedSocketId = socketIdSchema.parse(socketId);
-    
+
     this.participantActivity.delete(validatedSocketId);
     console.log(`참가자 활동 시간 제거: ${validatedSocketId}`);
   }
@@ -210,7 +214,7 @@ class RoomManager {
       this.checkInactiveParticipants();
     }, this.timeoutCheckInterval);
 
-    console.log('타임아웃 체크 시작됨');
+    console.log("타임아웃 체크 시작됨");
   }
 
   /**
@@ -220,7 +224,7 @@ class RoomManager {
     if (this.timeoutTimer) {
       clearInterval(this.timeoutTimer);
       this.timeoutTimer = null;
-      console.log('타임아웃 체크 중지됨');
+      console.log("타임아웃 체크 중지됨");
     }
   }
 
@@ -238,7 +242,9 @@ class RoomManager {
 
       // 60초 이상 무응답인 경우
       if (inactiveDuration >= this.inactivityTimeout) {
-        console.log(`무응답 참가자 감지: ${socketId}, 무응답 시간: ${Math.floor(inactiveDuration / 1000)}초`);
+        console.log(
+          `무응답 참가자 감지: ${socketId}, 무응답 시간: ${Math.floor(inactiveDuration / 1000)}초`
+        );
 
         // 참가자가 속한 방 찾기
         let participantRoomId = null;
@@ -256,7 +262,7 @@ class RoomManager {
 
           inactiveParticipants.push({
             socketId,
-            roomId: participantRoomId
+            roomId: participantRoomId,
           });
 
           console.log(`무응답 참가자 제거됨: ${socketId} (방: ${participantRoomId})`);
@@ -292,7 +298,7 @@ class RoomManager {
     this.stopTimeoutCheck();
     this.rooms.clear();
     this.participantActivity.clear();
-    console.log('RoomManager 리소스 정리 완료');
+    console.log("RoomManager 리소스 정리 완료");
   }
 }
 

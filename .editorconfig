@@ -1,0 +1,22 @@
+# EditorConfig는 다양한 에디터와 IDE에서 일관된 코딩 스타일을 유지하는 데 도움을 줍니다
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{js,jsx,ts,tsx,json,css}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{yml,yaml}]
+indent_size = 2

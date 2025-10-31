@@ -77,7 +77,31 @@ npm start
 
 # Run linter
 npm run lint
+
+# Format code with Biome
+npm run format
+
+# Check code formatting
+npm run format:check
+
+# Run Biome linter and formatter
+npm run biome:check
+
+# Auto-fix with Biome
+npm run biome:fix
 ```
+
+### Code Quality Tools
+
+This project uses **Biome** for fast and consistent code formatting and linting:
+
+- **Formatter**: Automatically formats JavaScript/TypeScript code
+- **Linter**: Catches common errors and enforces best practices
+- **Line Ending**: LF (Unix-style) for cross-platform compatibility
+- **Quote Style**: Double quotes
+- **Indent**: 2 spaces
+
+Configuration is in `biome.json` and `.editorconfig`.
 
 ## Implementation Status
 

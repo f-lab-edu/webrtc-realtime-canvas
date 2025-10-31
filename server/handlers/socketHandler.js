@@ -42,9 +42,7 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { roomId: validatedRoomId } = result.data;
-    console.log(
-      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도`,
-    );
+    console.log(`[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도`);
 
     // 방 정원 확인
     if (roomManager.isRoomFull(validatedRoomId)) {
@@ -86,14 +84,12 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     });
 
     console.log(
-      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId}에 참가 완료, 기존 참가자: ${participants.length}명`,
+      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId}에 참가 완료, 기존 참가자: ${participants.length}명`
     );
 
     // 방의 다른 참가자들에게 새 참가자 알림
     socket.to(validatedRoomId).emit("room:participant-joined", socket.id);
-    console.log(
-      `[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송`,
-    );
+    console.log(`[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송`);
   });
 
   /**
@@ -113,9 +109,7 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { roomId: validatedRoomId } = result.data;
-    console.log(
-      `[room:leave] 소켓 ${socket.id}가 방 ${validatedRoomId} 퇴장 시도`,
-    );
+    console.log(`[room:leave] 소켓 ${socket.id}가 방 ${validatedRoomId} 퇴장 시도`);
     handleRoomLeave(io, socket, roomManager, validatedRoomId);
   });
 
@@ -214,9 +208,7 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { roomId, event } = result.data;
-    console.log(
-      `[whiteboard:event] 방 ${roomId}에서 이벤트 발생: ${event.type}`,
-    );
+    console.log(`[whiteboard:event] 방 ${roomId}에서 이벤트 발생: ${event.type}`);
 
     // 참가자 활동 시간 업데이트
     roomManager.updateParticipantActivity(socket.id);
@@ -235,7 +227,7 @@ const registerSocketHandlers = (io, socket, roomManager) => {
   socket.on("heartbeat", () => {
     // 참가자 활동 시간 업데이트
     roomManager.updateParticipantActivity(socket.id);
-    
+
     // 응답 전송
     socket.emit("heartbeat:ack");
   });
@@ -282,9 +274,7 @@ const handleRoomLeave = (io, socket, roomManager, roomId) => {
     // 방의 다른 참가자들에게 퇴장 알림
     socket.to(roomId).emit("room:participant-left", socket.id);
 
-    console.log(
-      `[handleRoomLeave] 소켓 ${socket.id}가 방 ${roomId}에서 퇴장 완료`,
-    );
+    console.log(`[handleRoomLeave] 소켓 ${socket.id}가 방 ${roomId}에서 퇴장 완료`);
   }
 };
 
@@ -301,7 +291,9 @@ export const notifyInactiveParticipants = (io, inactiveParticipants) => {
   for (const { socketId, roomId } of inactiveParticipants) {
     // 방의 다른 참가자들에게 퇴장 알림
     io.to(roomId).emit("room:participant-left", socketId);
-    console.log(`[notifyInactiveParticipants] 무응답 참가자 퇴장 알림: ${socketId} (방: ${roomId})`);
+    console.log(
+      `[notifyInactiveParticipants] 무응답 참가자 퇴장 알림: ${socketId} (방: ${roomId})`
+    );
   }
 };
 

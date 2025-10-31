@@ -6,5 +6,5 @@ export default function Home() {
         Real-time video chat and whiteboard collaboration
       </p>
     </main>
-  )
+  );
 }
