@@ -18,11 +18,13 @@ CORS_ORIGIN=http://localhost:3000
 ## 서버 실행
 
 ### 개발 모드 (nodemon 사용)
+
 ```bash
 npm run server:dev
 ```
 
 ### 프로덕션 모드
+
 ```bash
 npm run server
 ```
@@ -30,9 +32,11 @@ npm run server
 ## API 엔드포인트
 
 ### GET /health
+
 서버 상태 확인
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -43,6 +47,7 @@ npm run server
 ## Socket.io 이벤트
 
 현재 구현된 기본 이벤트:
+
 - `connection`: 클라이언트 연결
 - `disconnect`: 클라이언트 연결 해제
 

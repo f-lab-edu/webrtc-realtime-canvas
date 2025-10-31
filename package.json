@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "server": "node server/index.js",
-    "server:dev": "nodemon server/index.js"
+    "server:dev": "nodemon server/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.16",
@@ -26,17 +29,22 @@
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10",
     "eslint": "^9",
     "eslint-config-next": "^16.0.1",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "postcss": "^8",
     "tailwindcss": "^4.1.16"
-  }
+  },
+  "type": "module"
 }
