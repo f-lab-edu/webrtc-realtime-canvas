@@ -1,0 +1,51 @@
+{
+  // Biome를 기본 포맷터로 설정
+  "editor.defaultFormatter": "biomejs.biome",
+  
+  // 저장 시 자동 포맷팅
+  "editor.formatOnSave": true,
+  
+  // 붙여넣기 시 자동 포맷팅
+  "editor.formatOnPaste": true,
+  
+  // 타입 시 자동 포맷팅 (선택사항)
+  "editor.formatOnType": false,
+  
+  // Biome 설정
+  "biome.enabled": true,
+  
+  // 파일 타입별 포맷터 설정
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  
+  // 줄바꿈 문자 설정 (LF로 통일)
+  "files.eol": "\n",
+  
+  // 저장 시 trailing whitespace 제거
+  "files.trimTrailingWhitespace": true,
+  
+  // 파일 끝에 빈 줄 추가
+  "files.insertFinalNewline": true
+}
