@@ -33,9 +33,34 @@ class WebRTCService {
       this.isInitiator = initiator;
       this.localStream = stream;
 
-      // 기본 STUN 서버 설정
+      // 환경 변수에서 STUN/TURN 서버 설정 가져오기
+      const iceServers = [];
+      
+      // STUN 서버 추가
+      const stunServer = process.env.NEXT_PUBLIC_STUN_SERVER;
+      if (stunServer) {
+        iceServers.push({ urls: stunServer });
+      }
+      
+      // TURN 서버 추가 (선택적)
+      const turnServer = process.env.NEXT_PUBLIC_TURN_SERVER;
+      if (turnServer) {
+        const turnConfig = { urls: turnServer };
+        
+        const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+        const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+        
+        if (turnUsername && turnCredential) {
+          turnConfig.username = turnUsername;
+          turnConfig.credential = turnCredential;
+        }
+        
+        iceServers.push(turnConfig);
+      }
+
+      // 기본 STUN 서버 설정 (환경 변수가 없을 경우)
       const defaultConfig = {
-        iceServers: [
+        iceServers: iceServers.length > 0 ? iceServers : [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
         ],
