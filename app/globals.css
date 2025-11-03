@@ -1,7 +1,25 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+@theme {
+  /* Zoom 브랜드 컬러 */
+  --color-zoom-blue: #0B5CFF;
+  --color-zoom-blue-hover: #0A52E6;
+  --color-zoom-blue-light: #E5F0FF;
+
+  /* 다크 모드 */
+  --color-dark-bg-primary: #1F1F1F;
+  --color-dark-bg-secondary: #2D2D2D;
+  --color-dark-text-primary: #FFFFFF;
+  --color-dark-text-secondary: #B3B3B3;
+
+  /* 라이트 모드 */
+  --color-light-bg-primary: #FFFFFF;
+  --color-light-bg-secondary: #F7F9FA;
+  --color-light-text-primary: #1F1F1F;
+  --color-light-text-secondary: #747487;
+}
+
+/* shadcn/ui 테마 변수 */
 @layer base {
   :root {
     --background: 0 0% 100%;
