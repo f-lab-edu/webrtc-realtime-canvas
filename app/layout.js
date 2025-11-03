@@ -1,4 +1,6 @@
 import "./globals.css";
+import { MediaProvider } from "@/contexts/MediaContext";
+import { RoomProvider } from "@/contexts/RoomContext";
 
 export const metadata = {
   title: "WebRTC 1:1 Communication",
@@ -8,7 +10,11 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="ko">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <RoomProvider>
+          <MediaProvider>{children}</MediaProvider>
+        </RoomProvider>
+      </body>
     </html>
   );
 }
