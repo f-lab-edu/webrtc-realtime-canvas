@@ -158,11 +158,17 @@ export function RoomProvider({ children }) {
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     return () => {
-      if (socketServiceRef.current?.isSocketConnected()) {
-        leaveRoom();
+      const socketService = socketServiceRef.current;
+      const currentRoomId = roomId;
+
+      if (currentRoomId && socketService?.isSocketConnected()) {
+        console.log("RoomContext 정리: 방 퇴장");
+        socketService.emit("room:leave", currentRoomId);
+        socketService.disconnect();
       }
     };
-  }, [leaveRoom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 빈 배열로 언마운트 시에만 실행
 
   const value = {
     roomId,

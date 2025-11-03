@@ -37,10 +37,6 @@ export default function RoomPage() {
    */
   useEffect(() => {
     const initialize = async () => {
-      if (isInitialized) {
-        return;
-      }
-
       try {
         console.log("방 페이지 초기화 시작:", roomId);
 
@@ -59,8 +55,11 @@ export default function RoomPage() {
       }
     };
 
-    initialize();
-  }, [roomId, joinRoom, initializeMedia, isInitialized]);
+    if (!isInitialized) {
+      initialize();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]); // roomId가 변경될 때만 실행
 
   /**
    * 뷰 전환 핸들러
