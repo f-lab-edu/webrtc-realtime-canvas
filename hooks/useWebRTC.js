@@ -127,6 +127,12 @@ function useWebRTC() {
         return;
       }
 
+      // Peer가 없거나 destroyed 상태면 무시
+      if (!webrtcService.peer || webrtcService.peer.destroyed) {
+        console.warn("Peer가 없거나 종료된 상태입니다. 시그널 무시");
+        return;
+      }
+
       try {
         isProcessingSignalRef.current = true;
         webrtcService.signal(signalData);
@@ -152,10 +158,12 @@ function useWebRTC() {
     const handleParticipantJoined = (targetSocketId) => {
       console.log(`새 참가자 입장: ${targetSocketId}, WebRTC 연결 시작 (initiator: true)`);
 
-      // 이미 초기화되었으면 무시
+      // 이미 초기화되었으면 기존 연결 정리 후 재초기화
       if (hasInitializedRef.current) {
-        console.warn("WebRTC가 이미 초기화되어 있습니다.");
-        return;
+        console.log("기존 WebRTC 연결 정리 후 재초기화");
+        webrtcService.destroy();
+        hasInitializedRef.current = false;
+        setConnectionState("disconnected");
       }
 
       // Initiator로 WebRTC 초기화 (offer 생성)
@@ -167,10 +175,12 @@ function useWebRTC() {
       const { from, signal } = data;
       console.log(`Offer 수신 from ${from}`);
 
-      // 이미 초기화되었으면 시그널만 처리
+      // 이미 초기화되었으면 기존 연결 정리 후 재초기화
       if (hasInitializedRef.current) {
-        handleSignal(signal);
-        return;
+        console.log("기존 WebRTC 연결 정리 후 재초기화");
+        webrtcService.destroy();
+        hasInitializedRef.current = false;
+        setConnectionState("disconnected");
       }
 
       // Non-initiator로 WebRTC 초기화 후 offer 처리
