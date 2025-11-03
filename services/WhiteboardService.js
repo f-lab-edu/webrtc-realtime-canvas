@@ -29,7 +29,6 @@ class WhiteboardService {
 
       // 기본 옵션 설정
       const defaultOptions = {
-        isDrawingMode: true,
         width: options.width || 800,
         height: options.height || 600,
         backgroundColor: "#ffffff",
@@ -41,13 +40,20 @@ class WhiteboardService {
         ...options,
       });
 
-      // 그리기 브러시 설정 (Fabric.js v6 방식)
-      if (this.canvas.freeDrawingBrush) {
-        this.canvas.freeDrawingBrush.width = 2;
-        this.canvas.freeDrawingBrush.color = "#000000";
-      }
+      // 그리기 모드 활성화 (생성 후 설정)
+      this.canvas.isDrawingMode = true;
 
-      console.log("화이트보드 캔버스 초기화 완료");
+      // 그리기 브러시 생성 및 설정 (Fabric.js v6)
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
+      this.canvas.freeDrawingBrush.width = 2;
+      this.canvas.freeDrawingBrush.color = "#000000";
+
+      console.log("화이트보드 캔버스 초기화 완료", {
+        isDrawingMode: this.canvas.isDrawingMode,
+        hasBrush: !!this.canvas.freeDrawingBrush,
+        brushWidth: this.canvas.freeDrawingBrush?.width,
+        brushColor: this.canvas.freeDrawingBrush?.color,
+      });
     } catch (error) {
       console.error("캔버스 초기화 에러:", error);
       throw error;
@@ -274,10 +280,12 @@ class WhiteboardService {
       return;
     }
 
-    if (this.canvas.freeDrawingBrush) {
-      this.canvas.freeDrawingBrush.color = color;
-      console.log("브러시 색상 변경:", color);
+    if (!this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
     }
+
+    this.canvas.freeDrawingBrush.color = color;
+    console.log("브러시 색상 변경:", color);
   }
 
   /**
@@ -290,10 +298,12 @@ class WhiteboardService {
       return;
     }
 
-    if (this.canvas.freeDrawingBrush) {
-      this.canvas.freeDrawingBrush.width = width;
-      console.log("브러시 두께 변경:", width);
+    if (!this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
     }
+
+    this.canvas.freeDrawingBrush.width = width;
+    console.log("브러시 두께 변경:", width);
   }
 
   /**
