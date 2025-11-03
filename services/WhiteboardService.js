@@ -20,6 +20,13 @@ class WhiteboardService {
    */
   initialize(canvasElement, options = {}) {
     try {
+      // 이미 초기화된 경우 기존 캔버스 정리
+      if (this.canvas) {
+        console.log("기존 캔버스 정리 중...");
+        this.canvas.dispose();
+        this.canvas = null;
+      }
+
       // 기본 옵션 설정
       const defaultOptions = {
         isDrawingMode: true,
@@ -34,9 +41,11 @@ class WhiteboardService {
         ...options,
       });
 
-      // 그리기 브러시 설정
-      this.canvas.freeDrawingBrush.width = 2;
-      this.canvas.freeDrawingBrush.color = "#000000";
+      // 그리기 브러시 설정 (Fabric.js v6 방식)
+      if (this.canvas.freeDrawingBrush) {
+        this.canvas.freeDrawingBrush.width = 2;
+        this.canvas.freeDrawingBrush.color = "#000000";
+      }
 
       console.log("화이트보드 캔버스 초기화 완료");
     } catch (error) {
@@ -265,8 +274,10 @@ class WhiteboardService {
       return;
     }
 
-    this.canvas.freeDrawingBrush.color = color;
-    console.log("브러시 색상 변경:", color);
+    if (this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush.color = color;
+      console.log("브러시 색상 변경:", color);
+    }
   }
 
   /**
@@ -279,8 +290,10 @@ class WhiteboardService {
       return;
     }
 
-    this.canvas.freeDrawingBrush.width = width;
-    console.log("브러시 두께 변경:", width);
+    if (this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush.width = width;
+      console.log("브러시 두께 변경:", width);
+    }
   }
 
   /**

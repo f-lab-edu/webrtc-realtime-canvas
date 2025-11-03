@@ -39,16 +39,11 @@ function useWhiteboard() {
         return;
       }
 
-      if (isInitialized) {
-        console.warn("화이트보드가 이미 초기화되었습니다.");
-        return;
-      }
-
       try {
         console.log("화이트보드 초기화 시작");
         const whiteboardService = whiteboardServiceRef.current;
 
-        // 캔버스 초기화
+        // 캔버스 초기화 (중복 초기화 방지는 WhiteboardService에서 처리)
         whiteboardService.initialize(canvasElement, options);
 
         // 그리기 이벤트 핸들러 등록
@@ -71,7 +66,7 @@ function useWhiteboard() {
         console.error("화이트보드 초기화 에러:", error);
       }
     },
-    [socketService, roomId, isConnected, isInitialized]
+    [socketService, roomId, isConnected]
   );
 
   /**
