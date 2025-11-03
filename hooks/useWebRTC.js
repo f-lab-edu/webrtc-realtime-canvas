@@ -24,9 +24,10 @@ function useWebRTC() {
   /**
    * WebRTC 연결 초기화
    * @param {boolean} initiator - offer를 생성하는 측인지 여부
+   * @param {string} targetSocketId - 연결할 상대방의 소켓 ID
    */
   const initializeWebRTC = useCallback(
-    (initiator) => {
+    (initiator, targetSocketId) => {
       if (!localStream) {
         console.error("로컬 스트림이 없습니다.");
         return;
@@ -37,8 +38,13 @@ function useWebRTC() {
         return;
       }
 
+      if (!targetSocketId) {
+        console.error("대상 소켓 ID가 없습니다.");
+        return;
+      }
+
       try {
-        console.log(`WebRTC 초기화 시작 (initiator: ${initiator})`);
+        console.log(`WebRTC 초기화 시작 (initiator: ${initiator}, target: ${targetSocketId})`);
         setIsInitiator(initiator);
         setConnectionState("connecting");
 
@@ -47,29 +53,29 @@ function useWebRTC() {
 
         // 시그널 이벤트 핸들러 등록 (SDP offer/answer, ICE candidate)
         webrtcService.onSignal((signal) => {
-          if (!socketService || !roomId) {
-            console.error("SocketService 또는 roomId가 없습니다.");
+          if (!socketService) {
+            console.error("SocketService가 없습니다.");
             return;
           }
 
           // 시그널 타입에 따라 다른 이벤트로 전송
           if (signal.type === "offer") {
-            console.log("Offer 전송");
+            console.log(`Offer 전송 -> ${targetSocketId}`);
             socketService.emit("signal:offer", {
-              roomId,
+              to: targetSocketId,
               signal,
             });
           } else if (signal.type === "answer") {
-            console.log("Answer 전송");
+            console.log(`Answer 전송 -> ${targetSocketId}`);
             socketService.emit("signal:answer", {
-              roomId,
+              to: targetSocketId,
               signal,
             });
           } else {
             // ICE candidate
-            console.log("ICE candidate 전송");
+            console.log(`ICE candidate 전송 -> ${targetSocketId}`);
             socketService.emit("signal:ice-candidate", {
-              roomId,
+              to: targetSocketId,
               candidate: signal,
             });
           }
@@ -107,7 +113,7 @@ function useWebRTC() {
         setConnectionState("disconnected");
       }
     },
-    [localStream, webrtcService, socketService, roomId, setRemoteStream]
+    [localStream, webrtcService, socketService, setRemoteStream]
   );
 
   /**
@@ -143,8 +149,8 @@ function useWebRTC() {
     }
 
     // 새 참가자 입장 이벤트 (Initiator 측)
-    const handleParticipantJoined = () => {
-      console.log("새 참가자 입장, WebRTC 연결 시작 (initiator: true)");
+    const handleParticipantJoined = (targetSocketId) => {
+      console.log(`새 참가자 입장: ${targetSocketId}, WebRTC 연결 시작 (initiator: true)`);
 
       // 이미 초기화되었으면 무시
       if (hasInitializedRef.current) {
@@ -153,25 +159,26 @@ function useWebRTC() {
       }
 
       // Initiator로 WebRTC 초기화 (offer 생성)
-      initializeWebRTC(true);
+      initializeWebRTC(true, targetSocketId);
     };
 
     // Offer 수신 이벤트 (Non-initiator 측)
     const handleOffer = (data) => {
-      console.log("Offer 수신");
+      const { from, signal } = data;
+      console.log(`Offer 수신 from ${from}`);
 
       // 이미 초기화되었으면 시그널만 처리
       if (hasInitializedRef.current) {
-        handleSignal(data.signal);
+        handleSignal(signal);
         return;
       }
 
       // Non-initiator로 WebRTC 초기화 후 offer 처리
-      initializeWebRTC(false);
+      initializeWebRTC(false, from);
 
       // 초기화 후 약간의 지연을 두고 offer 처리
       setTimeout(() => {
-        handleSignal(data.signal);
+        handleSignal(signal);
       }, 100);
     };
 
