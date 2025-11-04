@@ -186,6 +186,35 @@ class RoomManager {
   }
 
   /**
+   * 참가자 활동 시간 업데이트
+   * @param {string} socketId - 참가자 소켓 ID
+   */
+  updateParticipantActivity(socketId) {
+    // Zod로 파라미터 검증
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    // 해당 소켓이 속한 방 찾기
+    const roomId = this.getRoomIdBySocketId(validatedSocketId);
+    if (!roomId) {
+      console.log(`참가자 ${validatedSocketId}가 속한 방을 찾을 수 없습니다`);
+      return;
+    }
+
+    const room = this.getRoom(roomId);
+    if (!room) {
+      return;
+    }
+
+    // 참가자 활동 시간 업데이트 (향후 비활성 참가자 정리에 사용 가능)
+    if (!room.participantActivity) {
+      room.participantActivity = new Map();
+    }
+
+    room.participantActivity.set(validatedSocketId, new Date());
+    console.log(`참가자 ${validatedSocketId} 활동 시간 업데이트`);
+  }
+
+  /**
    * 리소스 정리 (서버 종료 시 호출)
    */
   cleanup() {

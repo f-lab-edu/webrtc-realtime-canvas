@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
+import ChatDebugPanel from "@/components/room/ChatDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
@@ -29,15 +30,7 @@ export default function RoomPage() {
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
-  const {
-    messages,
-    unreadCount,
-    sendMessage,
-    clearUnreadCount,
-    isTyping,
-    startTyping,
-    stopTyping,
-  } = useChat();
+  const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
 
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
@@ -145,9 +138,9 @@ export default function RoomPage() {
       </header>
 
       {/* 메인 컨텐츠: 3컬럼 레이아웃 (3:5:2 비율) */}
-      <div className="flex-1 flex flex-row min-h-0">
+      <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
         {/* 왼쪽: 비디오 스택 (30%) */}
-        <aside className="flex-[3] h-full bg-gray-950 border-r border-gray-800">
+        <aside className="flex-[3] flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
           <VideoStack
             localStream={localStream}
             remoteStream={remoteStream}
@@ -156,7 +149,7 @@ export default function RoomPage() {
         </aside>
 
         {/* 중앙: 화이트보드 (50%) */}
-        <main className="flex-[5] flex flex-col min-h-0">
+        <main className="flex-[5] flex flex-col min-h-0 overflow-hidden">
           <WhiteboardToolbar />
           <div className="flex-1 min-h-0">
             <WhiteboardCanvas />
@@ -165,15 +158,12 @@ export default function RoomPage() {
 
         {/* 오른쪽: 채팅 영역 (20%) */}
         {showChat && (
-          <aside className="flex-[2] bg-gray-900 border-l border-gray-800 transition-all duration-300">
+          <aside className="flex-[2] flex flex-col bg-gray-900 border-l border-gray-800 transition-all duration-300 overflow-hidden">
             <ChatPanel
               messages={messages}
               unreadCount={unreadCount}
               onSendMessage={sendMessage}
               onClearUnread={clearUnreadCount}
-              isTyping={isTyping}
-              onStartTyping={startTyping}
-              onStopTyping={stopTyping}
             />
           </aside>
         )}
@@ -184,6 +174,9 @@ export default function RoomPage() {
 
       {/* 오디오 디버그 패널 (개발 중에만 표시) */}
       {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}
+
+      {/* 채팅 디버그 패널 */}
+      <ChatDebugPanel />
 
       {/* 디버그 패널 토글 버튼 */}
       <button

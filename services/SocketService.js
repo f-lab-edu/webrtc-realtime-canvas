@@ -97,6 +97,7 @@ class SocketService {
       return;
     }
 
+    console.log(`[SocketService] emit 이벤트: ${event}`, data);
     this.socket.emit(event, data);
   }
 
@@ -111,6 +112,7 @@ class SocketService {
       return;
     }
 
+    console.log(`[SocketService] 이벤트 리스너 등록: ${event}`);
     this.socket.on(event, handler);
   }
 

@@ -6,18 +6,14 @@ import { z } from "zod";
 
 /**
  * 방 ID 스키마
- * - 영문 소문자, 숫자, 하이픈만 허용
- * - 연속 하이픈, 앞뒤 하이픈 불가
- * - 최소 3자, 최대 50자
+ * - 영문 소문자, 숫자, 하이픈, 언더스코어 허용
+ * - 최소 3자, 최대 100자 (타임스탬프 기반 ID 지원)
  */
 export const roomIdSchema = z
   .string()
   .min(3, "방 이름은 최소 3자 이상이어야 합니다")
-  .max(50, "방 이름은 50자를 초과할 수 없습니다")
-  .regex(
-    /^[a-z0-9]+(-[a-z0-9]+)*$/,
-    "방 이름은 영문 소문자, 숫자, 하이픈만 사용 가능합니다 (연속 하이픈 불가)"
-  );
+  .max(100, "방 이름은 100자를 초과할 수 없습니다")
+  .regex(/^[a-z0-9_-]+$/i, "방 이름은 영문자, 숫자, 하이픈, 언더스코어만 사용 가능합니다");
 
 /**
  * 소켓 ID 스키마
@@ -91,7 +87,10 @@ export const chatMessageSchema = z.object({
     id: z.string().min(1, "메시지 ID는 필수입니다"),
     senderId: socketIdSchema,
     senderName: z.string().min(1, "발신자 이름은 필수입니다"),
-    content: z.string().min(1, "메시지 내용은 필수입니다").max(1000, "메시지는 1000자를 초과할 수 없습니다"),
+    content: z
+      .string()
+      .min(1, "메시지 내용은 필수입니다")
+      .max(1000, "메시지는 1000자를 초과할 수 없습니다"),
     timestamp: z.coerce.date(),
   }),
 });
