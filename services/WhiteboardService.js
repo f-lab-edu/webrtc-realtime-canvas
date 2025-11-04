@@ -20,9 +20,15 @@ class WhiteboardService {
    */
   initialize(canvasElement, options = {}) {
     try {
+      // 이미 초기화된 경우 기존 캔버스 정리
+      if (this.canvas) {
+        console.log("기존 캔버스 정리 중...");
+        this.canvas.dispose();
+        this.canvas = null;
+      }
+
       // 기본 옵션 설정
       const defaultOptions = {
-        isDrawingMode: true,
         width: options.width || 800,
         height: options.height || 600,
         backgroundColor: "#ffffff",
@@ -34,11 +40,20 @@ class WhiteboardService {
         ...options,
       });
 
-      // 그리기 브러시 설정
+      // 그리기 모드 활성화 (생성 후 설정)
+      this.canvas.isDrawingMode = true;
+
+      // 그리기 브러시 생성 및 설정 (Fabric.js v6)
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
       this.canvas.freeDrawingBrush.width = 2;
       this.canvas.freeDrawingBrush.color = "#000000";
 
-      console.log("화이트보드 캔버스 초기화 완료");
+      console.log("화이트보드 캔버스 초기화 완료", {
+        isDrawingMode: this.canvas.isDrawingMode,
+        hasBrush: !!this.canvas.freeDrawingBrush,
+        brushWidth: this.canvas.freeDrawingBrush?.width,
+        brushColor: this.canvas.freeDrawingBrush?.color,
+      });
     } catch (error) {
       console.error("캔버스 초기화 에러:", error);
       throw error;
@@ -265,6 +280,10 @@ class WhiteboardService {
       return;
     }
 
+    if (!this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
+    }
+
     this.canvas.freeDrawingBrush.color = color;
     console.log("브러시 색상 변경:", color);
   }
@@ -277,6 +296,10 @@ class WhiteboardService {
     if (!this.canvas) {
       console.error("캔버스가 초기화되지 않았습니다.");
       return;
+    }
+
+    if (!this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
     }
 
     this.canvas.freeDrawingBrush.width = width;

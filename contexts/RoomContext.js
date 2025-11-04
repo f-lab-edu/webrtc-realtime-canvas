@@ -19,6 +19,7 @@ export function RoomProvider({ children }) {
   const [participants, setParticipants] = useState([]);
   const [connectionState, setConnectionState] = useState("disconnected"); // 'connecting' | 'connected' | 'disconnected'
   const [isConnected, setIsConnected] = useState(false);
+  const [showChat, setShowChat] = useState(true); // 채팅 영역 표시 여부
 
   // SocketService 인스턴스 (ref로 관리하여 재생성 방지)
   const socketServiceRef = useRef(null);
@@ -105,10 +106,17 @@ export function RoomProvider({ children }) {
   const joinRoom = useCallback(
     async (targetRoomId) => {
       try {
+        const socketService = socketServiceRef.current;
+
+        // 이미 같은 방에 연결되어 있으면 무시
+        if (roomId === targetRoomId && socketService.isSocketConnected()) {
+          console.log("이미 방에 연결되어 있습니다:", targetRoomId);
+          return;
+        }
+
         setConnectionState("connecting");
         console.log("방 참가 시도:", targetRoomId);
 
-        const socketService = socketServiceRef.current;
         const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 
         // Socket 연결
@@ -127,7 +135,7 @@ export function RoomProvider({ children }) {
         throw error;
       }
     },
-    [setupSocketListeners]
+    [setupSocketListeners, roomId]
   );
 
   /**
@@ -155,24 +163,50 @@ export function RoomProvider({ children }) {
     }
   }, [roomId]);
 
+  /**
+   * 채팅 영역 토글
+   */
+  const toggleChat = useCallback(() => {
+    setShowChat((prev) => !prev);
+  }, []);
+
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
-    return () => {
-      if (socketServiceRef.current?.isSocketConnected()) {
-        leaveRoom();
+    // 페이지 새로고침 또는 닫기 시 정리
+    const handleBeforeUnload = () => {
+      const socketService = socketServiceRef.current;
+      if (roomId && socketService?.isSocketConnected()) {
+        console.log("페이지 종료: 방 퇴장");
+        socketService.emit("room:leave", roomId);
+        socketService.disconnect();
       }
     };
-  }, [leaveRoom]);
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+
+      const socketService = socketServiceRef.current;
+      if (roomId && socketService?.isSocketConnected()) {
+        console.log("RoomContext 정리: 방 퇴장");
+        socketService.emit("room:leave", roomId);
+        socketService.disconnect();
+      }
+    };
+  }, [roomId]); // roomId를 의존성에 추가
 
   const value = {
     roomId,
     participants,
     connectionState,
     isConnected,
+    showChat,
     socketService: socketServiceRef.current,
     createRoom,
     joinRoom,
     leaveRoom,
+    toggleChat,
   };
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

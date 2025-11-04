@@ -35,36 +35,49 @@ class WebRTCService {
 
       // 환경 변수에서 STUN/TURN 서버 설정 가져오기
       const iceServers = [];
-      
+
       // STUN 서버 추가
       const stunServer = process.env.NEXT_PUBLIC_STUN_SERVER;
       if (stunServer) {
         iceServers.push({ urls: stunServer });
       }
-      
+
       // TURN 서버 추가 (선택적)
       const turnServer = process.env.NEXT_PUBLIC_TURN_SERVER;
       if (turnServer) {
         const turnConfig = { urls: turnServer };
-        
+
         const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
         const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-        
+
         if (turnUsername && turnCredential) {
           turnConfig.username = turnUsername;
           turnConfig.credential = turnCredential;
         }
-        
+
         iceServers.push(turnConfig);
       }
 
       // 기본 STUN 서버 설정 (환경 변수가 없을 경우)
       const defaultConfig = {
-        iceServers: iceServers.length > 0 ? iceServers : [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-        ],
+        iceServers:
+          iceServers.length > 0
+            ? iceServers
+            : [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
       };
+
+      // 로컬 스트림 트랙 확인
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      console.log(`WebRTC 초기화 - 로컬 스트림 트랙:`);
+      console.log(
+        `- 비디오: ${videoTracks.length}개`,
+        videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
+      console.log(
+        `- 오디오: ${audioTracks.length}개`,
+        audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
 
       // SimplePeer 인스턴스 생성
       this.peer = new SimplePeer({
@@ -84,11 +97,50 @@ class WebRTCService {
 
       // 원격 스트림 수신 이벤트
       this.peer.on("stream", (stream) => {
-        console.log("원격 스트림 수신");
+        console.log(`\n========== [WebRTCService peer.on('stream')] ==========`);
+        console.log(`⏰ 타임스탬프: ${new Date().toISOString()}`);
+        console.log(`🆔 Stream ID: ${stream.id}`);
+        console.log(`📊 Stream 상태:`);
+        console.log(`   - active: ${stream.active}`);
+
+        // 트랙 정보 로깅 (디버깅용)
+        const audioTracks = stream.getAudioTracks();
+        const videoTracks = stream.getVideoTracks();
+
+        console.log(`\n🎥 비디오 트랙: ${videoTracks.length}개`);
+        videoTracks.forEach((t, i) => {
+          console.log(`   [${i}] ${t.label}`);
+          console.log(`       - id: ${t.id}`);
+          console.log(`       - kind: ${t.kind}`);
+          console.log(`       - enabled: ${t.enabled}`);
+          console.log(`       - muted: ${t.muted}`);
+          console.log(`       - readyState: ${t.readyState}`);
+        });
+
+        console.log(`\n🎵 오디오 트랙: ${audioTracks.length}개`);
+        audioTracks.forEach((t, i) => {
+          console.log(`   [${i}] ${t.label}`);
+          console.log(`       - id: ${t.id}`);
+          console.log(`       - kind: ${t.kind}`);
+          console.log(`       - enabled: ${t.enabled}`);
+          console.log(`       - muted: ${t.muted}`);
+          console.log(`       - readyState: ${t.readyState}`);
+        });
+
+        // SimplePeer가 준비된 스트림을 제공하므로 즉시 전달
+        console.log(`\n📦 this.remoteStream 저장 및 핸들러 호출`);
+        console.log(`   - 이전 remoteStream: ${this.remoteStream?.id || "null"}`);
         this.remoteStream = stream;
+        console.log(`   - 새 remoteStream: ${this.remoteStream.id}`);
+
         if (this.handlers.stream) {
+          console.log(`✅ stream 핸들러 존재, 호출 시작`);
           this.handlers.stream(stream);
+          console.log(`✅ stream 핸들러 호출 완료`);
+        } else {
+          console.warn(`⚠️ stream 핸들러가 등록되지 않음`);
         }
+        console.log(`========== [WebRTCService peer.on('stream') 종료] ==========\n`);
       });
 
       // 연결 성공 이벤트

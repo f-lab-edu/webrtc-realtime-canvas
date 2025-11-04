@@ -44,16 +44,16 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     const { roomId: validatedRoomId } = result.data;
     console.log(`[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도`);
 
+    // 기존 방에서 나가기
+    if (currentRoomId) {
+      handleRoomLeave(io, socket, roomManager, currentRoomId);
+    }
+
     // 방 정원 확인
     if (roomManager.isRoomFull(validatedRoomId)) {
       console.log(`[room:join] 방 ${validatedRoomId} 정원 초과`);
       socket.emit("room:full");
       return;
-    }
-
-    // 기존 방에서 나가기
-    if (currentRoomId) {
-      handleRoomLeave(io, socket, roomManager, currentRoomId);
     }
 
     // 참가자 추가
@@ -68,9 +68,6 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     // Socket.io 방에 참가
     socket.join(validatedRoomId);
     currentRoomId = validatedRoomId;
-
-    // 참가자 활동 시간 초기화
-    roomManager.updateParticipantActivity(socket.id);
 
     // 현재 방의 다른 참가자 목록 조회
     const participants = roomManager
@@ -210,26 +207,11 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     const { roomId, event } = result.data;
     console.log(`[whiteboard:event] 방 ${roomId}에서 이벤트 발생: ${event.type}`);
 
-    // 참가자 활동 시간 업데이트
-    roomManager.updateParticipantActivity(socket.id);
-
     // 방의 다른 참가자들에게 이벤트 중계
     socket.to(roomId).emit("whiteboard:event", {
       from: socket.id,
       event,
     });
-  });
-
-  /**
-   * heartbeat 이벤트 핸들러
-   * 클라이언트의 활동 상태를 추적하기 위한 핑 메시지
-   */
-  socket.on("heartbeat", () => {
-    // 참가자 활동 시간 업데이트
-    roomManager.updateParticipantActivity(socket.id);
-
-    // 응답 전송
-    socket.emit("heartbeat:ack");
   });
 
   /**
@@ -242,9 +224,6 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     if (currentRoomId) {
       handleRoomLeave(io, socket, roomManager, currentRoomId);
     }
-
-    // 참가자 활동 시간 제거
-    roomManager.removeParticipantActivity(socket.id);
   });
 };
 
@@ -268,32 +247,10 @@ const handleRoomLeave = (io, socket, roomManager, roomId) => {
     // Socket.io 방에서 나가기
     socket.leave(roomId);
 
-    // 참가자 활동 시간 제거
-    roomManager.removeParticipantActivity(socket.id);
-
     // 방의 다른 참가자들에게 퇴장 알림
     socket.to(roomId).emit("room:participant-left", socket.id);
 
     console.log(`[handleRoomLeave] 소켓 ${socket.id}가 방 ${roomId}에서 퇴장 완료`);
-  }
-};
-
-/**
- * 무응답 참가자 제거 알림 처리
- * @param {Object} io - Socket.io 서버 인스턴스
- * @param {Array} inactiveParticipants - 제거된 참가자 정보 배열
- */
-export const notifyInactiveParticipants = (io, inactiveParticipants) => {
-  if (!io || !inactiveParticipants || inactiveParticipants.length === 0) {
-    return;
-  }
-
-  for (const { socketId, roomId } of inactiveParticipants) {
-    // 방의 다른 참가자들에게 퇴장 알림
-    io.to(roomId).emit("room:participant-left", socketId);
-    console.log(
-      `[notifyInactiveParticipants] 무응답 참가자 퇴장 알림: ${socketId} (방: ${roomId})`
-    );
   }
 };
 

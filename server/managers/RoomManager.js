@@ -8,17 +8,6 @@ class RoomManager {
   constructor() {
     // 메모리 기반 방 관리 (Map 사용)
     this.rooms = new Map();
-    // 참가자별 마지막 활동 시간 추적
-    this.participantActivity = new Map();
-    // 타임아웃 체크 간격 (10초마다 체크)
-    this.timeoutCheckInterval = 10000;
-    // 무응답 타임아웃 시간 (60초)
-    this.inactivityTimeout = 60000;
-    // 타임아웃 체크 타이머
-    this.timeoutTimer = null;
-
-    // 타임아웃 체크 시작
-    this.startTimeoutCheck();
   }
 
   /**
@@ -179,101 +168,6 @@ class RoomManager {
   }
 
   /**
-   * 참가자 활동 시간 업데이트
-   * @param {string} socketId - 참가자 소켓 ID
-   */
-  updateParticipantActivity(socketId) {
-    // Zod로 파라미터 검증
-    const validatedSocketId = socketIdSchema.parse(socketId);
-
-    this.participantActivity.set(validatedSocketId, Date.now());
-    console.log(`참가자 활동 시간 업데이트: ${validatedSocketId}`);
-  }
-
-  /**
-   * 참가자 활동 시간 제거
-   * @param {string} socketId - 참가자 소켓 ID
-   */
-  removeParticipantActivity(socketId) {
-    // Zod로 파라미터 검증
-    const validatedSocketId = socketIdSchema.parse(socketId);
-
-    this.participantActivity.delete(validatedSocketId);
-    console.log(`참가자 활동 시간 제거: ${validatedSocketId}`);
-  }
-
-  /**
-   * 타임아웃 체크 시작
-   */
-  startTimeoutCheck() {
-    if (this.timeoutTimer) {
-      return;
-    }
-
-    this.timeoutTimer = setInterval(() => {
-      this.checkInactiveParticipants();
-    }, this.timeoutCheckInterval);
-
-    console.log("타임아웃 체크 시작됨");
-  }
-
-  /**
-   * 타임아웃 체크 중지
-   */
-  stopTimeoutCheck() {
-    if (this.timeoutTimer) {
-      clearInterval(this.timeoutTimer);
-      this.timeoutTimer = null;
-      console.log("타임아웃 체크 중지됨");
-    }
-  }
-
-  /**
-   * 무응답 참가자 체크 및 제거
-   * @returns {Array} 제거된 참가자 정보 배열 [{ socketId, roomId }]
-   */
-  checkInactiveParticipants() {
-    const now = Date.now();
-    const inactiveParticipants = [];
-
-    // 모든 참가자의 활동 시간 체크
-    for (const [socketId, lastActivity] of this.participantActivity.entries()) {
-      const inactiveDuration = now - lastActivity;
-
-      // 60초 이상 무응답인 경우
-      if (inactiveDuration >= this.inactivityTimeout) {
-        console.log(
-          `무응답 참가자 감지: ${socketId}, 무응답 시간: ${Math.floor(inactiveDuration / 1000)}초`
-        );
-
-        // 참가자가 속한 방 찾기
-        let participantRoomId = null;
-        for (const [roomId, room] of this.rooms.entries()) {
-          if (room.participants.has(socketId)) {
-            participantRoomId = roomId;
-            break;
-          }
-        }
-
-        if (participantRoomId) {
-          // 참가자 제거
-          this.removeParticipant(participantRoomId, socketId);
-          this.removeParticipantActivity(socketId);
-
-          inactiveParticipants.push({
-            socketId,
-            roomId: participantRoomId,
-          });
-
-          console.log(`무응답 참가자 제거됨: ${socketId} (방: ${participantRoomId})`);
-        }
-      }
-    }
-
-    return inactiveParticipants;
-  }
-
-  /**
    * 특정 소켓의 방 ID 조회
    * @param {string} socketId - 참가자 소켓 ID
    * @returns {string|null} 방 ID 또는 null
@@ -295,9 +189,7 @@ class RoomManager {
    * 리소스 정리 (서버 종료 시 호출)
    */
   cleanup() {
-    this.stopTimeoutCheck();
     this.rooms.clear();
-    this.participantActivity.clear();
     console.log("RoomManager 리소스 정리 완료");
   }
 }

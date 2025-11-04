@@ -39,16 +39,11 @@ function useWhiteboard() {
         return;
       }
 
-      if (isInitialized) {
-        console.warn("화이트보드가 이미 초기화되었습니다.");
-        return;
-      }
-
       try {
         console.log("화이트보드 초기화 시작");
         const whiteboardService = whiteboardServiceRef.current;
 
-        // 캔버스 초기화
+        // 캔버스 초기화 (중복 초기화 방지는 WhiteboardService에서 처리)
         whiteboardService.initialize(canvasElement, options);
 
         // 그리기 이벤트 핸들러 등록
@@ -71,7 +66,7 @@ function useWhiteboard() {
         console.error("화이트보드 초기화 에러:", error);
       }
     },
-    [socketService, roomId, isConnected, isInitialized]
+    [socketService, roomId, isConnected]
   );
 
   /**
@@ -175,9 +170,19 @@ function useWhiteboard() {
    * Socket 이벤트 리스너 설정 (원격 그리기 이벤트 수신)
    */
   useEffect(() => {
-    if (!socketService || !isInitialized) {
+    // Socket이 연결되지 않았으면 대기
+    if (!socketService || !socketService.socket) {
+      console.log("[useWhiteboard] Socket이 아직 연결되지 않았습니다. 이벤트 리스너 등록 대기 중...");
       return;
     }
+
+    // 화이트보드가 초기화되지 않았으면 대기
+    if (!isInitialized) {
+      console.log("[useWhiteboard] 화이트보드가 초기화되지 않았습니다. 이벤트 리스너 등록 대기 중...");
+      return;
+    }
+
+    console.log("[useWhiteboard] Socket 연결 및 화이트보드 초기화 완료, 이벤트 리스너 등록");
 
     // 원격 그리기 이벤트 수신
     const handleWhiteboardEvent = (data) => {
@@ -190,9 +195,10 @@ function useWhiteboard() {
 
     // 클린업 함수
     return () => {
+      console.log("[useWhiteboard] 이벤트 리스너 제거");
       socketService.off("whiteboard:event", handleWhiteboardEvent);
     };
-  }, [socketService, isInitialized, applyRemoteEvent]);
+  }, [socketService, socketService?.socket, isInitialized, applyRemoteEvent]);
 
   /**
    * 컴포넌트 언마운트 시 화이트보드 정리

@@ -24,29 +24,24 @@ export default function WhiteboardCanvas() {
     }
 
     // 컨테이너 크기에 맞춰 캔버스 크기 설정
-    const updateCanvasSize = () => {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
-      // 캔버스 엘리먼트 크기 설정
-      canvasElement.width = width;
-      canvasElement.height = height;
+    // 캔버스 엘리먼트 크기 설정
+    canvasElement.width = width;
+    canvasElement.height = height;
 
-      // Fabric.js 캔버스 초기화
-      initializeWhiteboard(canvasElement, {
-        width,
-        height,
-      });
-    };
-
-    // 초기 크기 설정
-    updateCanvasSize();
+    // Fabric.js 캔버스 초기화 (한 번만 실행)
+    initializeWhiteboard(canvasElement, {
+      width,
+      height,
+    });
 
     // 윈도우 리사이즈 이벤트 핸들러
     const handleResize = () => {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      setCanvasSize(width, height);
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      setCanvasSize(newWidth, newHeight);
     };
 
     window.addEventListener("resize", handleResize);
@@ -55,7 +50,8 @@ export default function WhiteboardCanvas() {
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [initializeWhiteboard, setCanvasSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 빈 배열로 한 번만 실행
 
   return (
     <div ref={containerRef} className="w-full h-full bg-white">
