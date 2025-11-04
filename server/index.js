@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express, { json } from "express";
 import { Server } from "socket.io";
+import registerChatHandlers from "./handlers/chatHandler.js";
 import registerSocketHandlers from "./handlers/socketHandler.js";
 import RoomManager from "./managers/RoomManager.js";
 
@@ -42,6 +43,9 @@ io.on("connection", (socket) => {
 
   // Socket 이벤트 핸들러 등록
   registerSocketHandlers(io, socket, roomManager);
+
+  // 채팅 이벤트 핸들러 등록
+  registerChatHandlers(io, socket, roomManager);
 });
 
 // 서버 시작

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import VideoStack from "@/components/room/VideoStack";
@@ -10,6 +11,7 @@ import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import useChat from "@/hooks/useChat";
 import useWebRTC from "@/hooks/useWebRTC";
 
 /**
@@ -25,6 +27,17 @@ export default function RoomPage() {
   const { joinRoom, isConnected, showChat, toggleChat } = useRoomContext();
   const { localStream, remoteStream, initializeMedia, isVideoEnabled } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
+
+  // 채팅 훅
+  const {
+    messages,
+    unreadCount,
+    sendMessage,
+    clearUnreadCount,
+    isTyping,
+    startTyping,
+    stopTyping,
+  } = useChat();
 
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
@@ -109,18 +122,24 @@ export default function RoomPage() {
             🏠 홈
           </Button>
 
+          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white">
+            {copySuccess ? "✅ 복사됨" : "🔗 링크 복사"}
+          </Button>
+
           <Button
             onClick={toggleChat}
             variant="outline"
             size="sm"
-            className="text-white"
+            className="text-white relative"
             title={showChat ? "채팅 숨기기" : "채팅 보기"}
           >
             {showChat ? "💬" : "◀"}
-          </Button>
-
-          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white">
-            {copySuccess ? "✅ 복사됨" : "🔗 링크 복사"}
+            {/* 읽지 않은 메시지 배지 */}
+            {unreadCount > 0 && !showChat && (
+              <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-500 text-white text-xs rounded-full">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </Button>
         </div>
       </header>
@@ -147,15 +166,15 @@ export default function RoomPage() {
         {/* 오른쪽: 채팅 영역 (20%) */}
         {showChat && (
           <aside className="flex-[2] bg-gray-900 border-l border-gray-800 transition-all duration-300">
-            <div className="p-4 h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gray-800 flex items-center justify-center">
-                  <span className="text-2xl">💬</span>
-                </div>
-                <p className="text-gray-500 text-sm">채팅 기능</p>
-                <p className="text-gray-600 text-xs mt-1">준비 중...</p>
-              </div>
-            </div>
+            <ChatPanel
+              messages={messages}
+              unreadCount={unreadCount}
+              onSendMessage={sendMessage}
+              onClearUnread={clearUnreadCount}
+              isTyping={isTyping}
+              onStartTyping={startTyping}
+              onStopTyping={stopTyping}
+            />
           </aside>
         )}
       </div>
