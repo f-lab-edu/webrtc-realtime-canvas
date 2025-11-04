@@ -47,5 +47,13 @@
   "files.trimTrailingWhitespace": true,
 
   // 파일 끝에 빈 줄 추가
-  "files.insertFinalNewline": true
+  "files.insertFinalNewline": true,
+  "cSpell.words": [
+    "Autoplay",
+    "canplay",
+    "canplaythrough",
+    "loadedmetadata",
+    "unmuted",
+    "webrtc"
+  ]
 }

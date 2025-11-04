@@ -31,23 +31,6 @@ const io = new Server(httpServer, {
 // RoomManager 인스턴스 생성
 const roomManager = new RoomManager();
 
-// 무응답 참가자 체크 콜백 설정
-// RoomManager의 타임아웃 체크 후 알림 전송
-const originalCheckInactive = roomManager.checkInactiveParticipants.bind(roomManager);
-roomManager.checkInactiveParticipants = () => {
-  const inactiveParticipants = originalCheckInactive();
-
-  // 무응답 참가자가 있으면 알림 전송
-  if (inactiveParticipants.length > 0) {
-    // notifyInactiveParticipants를 동적으로 import
-    import("./handlers/socketHandler.js").then(({ notifyInactiveParticipants }) => {
-      notifyInactiveParticipants(io, inactiveParticipants);
-    });
-  }
-
-  return inactiveParticipants;
-};
-
 // 헬스 체크 엔드포인트
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

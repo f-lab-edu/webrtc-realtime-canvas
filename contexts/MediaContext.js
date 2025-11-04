@@ -51,10 +51,24 @@ export function MediaProvider({ children }) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
 
       console.log("미디어 스트림 획득 성공");
+
+      // 오디오/비디오 트랙 확인
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+
+      console.log(`로컬 스트림 트랙 정보:`);
+      console.log(`- 비디오 트랙: ${videoTracks.length}개`, videoTracks.map(t => `${t.label} (enabled: ${t.enabled})`));
+      console.log(`- 오디오 트랙: ${audioTracks.length}개`, audioTracks.map(t => `${t.label} (enabled: ${t.enabled})`));
+
+      if (audioTracks.length === 0) {
+        console.warn("⚠️ 오디오 트랙이 없습니다!");
+      }
+
       setLocalStream(stream);
       setIsVideoEnabled(true);
       setIsAudioEnabled(true);

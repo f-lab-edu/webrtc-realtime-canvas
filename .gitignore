@@ -250,6 +250,7 @@ $RECYCLE.BIN/
 # additional
 .claude
 /documents/**
+claude.md
 
 .kiro
 claude.md

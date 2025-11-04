@@ -6,8 +6,18 @@ import { z } from "zod";
 
 /**
  * 방 ID 스키마
+ * - 영문 소문자, 숫자, 하이픈만 허용
+ * - 연속 하이픈, 앞뒤 하이픈 불가
+ * - 최소 3자, 최대 50자
  */
-export const roomIdSchema = z.string().min(1, "방 ID는 필수입니다");
+export const roomIdSchema = z
+  .string()
+  .min(3, "방 이름은 최소 3자 이상이어야 합니다")
+  .max(50, "방 이름은 50자를 초과할 수 없습니다")
+  .regex(
+    /^[a-z0-9]+(-[a-z0-9]+)*$/,
+    "방 이름은 영문 소문자, 숫자, 하이픈만 사용 가능합니다 (연속 하이픈 불가)"
+  );
 
 /**
  * 소켓 ID 스키마

@@ -27,7 +27,7 @@ export default function VideoGrid({
       <div className="w-full h-full">
         {isRemoteConnected ? (
           // 원격 비디오가 있으면 메인에 표시
-          <VideoPlayer stream={remoteStream} isLocal={false} isVideoEnabled={true} label="상대방" />
+          <VideoPlayer stream={remoteStream} isLocal={false} isVideoEnabled={true} label="원격" />
         ) : (
           // 원격 비디오가 없으면 로컬 비디오를 메인에 표시
           <div className="w-full h-full flex items-center justify-center">
