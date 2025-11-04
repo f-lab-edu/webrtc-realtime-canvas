@@ -71,3 +71,25 @@ export const roomManagerParamsSchema = z.object({
   roomId: roomIdSchema,
   socketId: socketIdSchema.optional(),
 });
+
+/**
+ * 채팅 메시지 스키마
+ */
+export const chatMessageSchema = z.object({
+  roomId: roomIdSchema,
+  message: z.object({
+    id: z.string().min(1, "메시지 ID는 필수입니다"),
+    senderId: socketIdSchema,
+    senderName: z.string().min(1, "발신자 이름은 필수입니다"),
+    content: z.string().min(1, "메시지 내용은 필수입니다").max(1000, "메시지는 1000자를 초과할 수 없습니다"),
+    timestamp: z.coerce.date(),
+  }),
+});
+
+/**
+ * 타이핑 상태 스키마 (선택적)
+ */
+export const chatTypingSchema = z.object({
+  roomId: roomIdSchema,
+  isTyping: z.boolean(),
+});

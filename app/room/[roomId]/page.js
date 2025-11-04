@@ -2,14 +2,17 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import ChatPanel from "@/components/chat/ChatPanel";
 import ConnectionStatus from "@/components/room/ConnectionStatus";
 import ControlBar from "@/components/room/ControlBar";
 import VideoGrid from "@/components/room/VideoGrid";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import useChat from "@/hooks/useChat";
 import useWebRTC from "@/hooks/useWebRTC";
 
 /**
@@ -26,8 +29,22 @@ export default function RoomPage() {
     useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
-  // 뷰 전환 상태 ('video' | 'whiteboard')
+  // 채팅 훅
+  const {
+    messages,
+    unreadCount,
+    sendMessage,
+    clearUnreadCount,
+    isTyping,
+    startTyping,
+    stopTyping,
+  } = useChat();
+
+  // 뷰 전환 상태 ('video' | 'whiteboard' | 'chat')
   const [activeView, setActiveView] = useState("video");
+
+  // 채팅 패널 열림/닫힘 상태
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // 초기화 상태
   const [isInitialized, setIsInitialized] = useState(false);
@@ -68,6 +85,23 @@ export default function RoomPage() {
   const handleViewChange = (view) => {
     setActiveView(view);
     console.log("뷰 전환:", view);
+
+    // 채팅 뷰로 전환 시 읽지 않은 메시지 카운트 초기화
+    if (view === "chat") {
+      clearUnreadCount();
+    }
+  };
+
+  /**
+   * 채팅 패널 토글 핸들러
+   */
+  const handleToggleChat = () => {
+    setIsChatOpen(!isChatOpen);
+
+    // 채팅 패널 열 때 읽지 않은 메시지 카운트 초기화
+    if (!isChatOpen) {
+      clearUnreadCount();
+    }
   };
 
   return (
@@ -95,6 +129,22 @@ export default function RoomPage() {
           >
             ✏️ 화이트보드
           </Button>
+          <Button
+            variant={activeView === "chat" ? "default" : "ghost"}
+            onClick={() => handleViewChange("chat")}
+            className="text-white relative"
+          >
+            💬 채팅
+            {/* 읽지 않은 메시지 배지 */}
+            {unreadCount > 0 && activeView !== "chat" && (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Badge>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -120,6 +170,21 @@ export default function RoomPage() {
             <div className="flex-1">
               <WhiteboardCanvas />
             </div>
+          </div>
+        )}
+
+        {/* 채팅 뷰 */}
+        {activeView === "chat" && (
+          <div className="w-full h-full">
+            <ChatPanel
+              messages={messages}
+              unreadCount={unreadCount}
+              onSendMessage={sendMessage}
+              onClearUnread={clearUnreadCount}
+              isTyping={isTyping}
+              onStartTyping={startTyping}
+              onStopTyping={stopTyping}
+            />
           </div>
         )}
       </div>
