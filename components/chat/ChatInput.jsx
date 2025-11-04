@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import * as button from "@/components/ui/button";
+import * as input from "@/components/ui/input";
 
 /**
  * ChatInput 컴포넌트
@@ -63,7 +63,7 @@ export default function ChatInput({ onSendMessage, onStartTyping, onStopTyping }
   return (
     <div className="flex items-center gap-2">
       {/* 메시지 입력 필드 */}
-      <Input
+      <input.Input
         type="text"
         placeholder="메시지를 입력하세요..."
         value={message}
@@ -73,13 +73,13 @@ export default function ChatInput({ onSendMessage, onStartTyping, onStopTyping }
       />
 
       {/* 전송 버튼 */}
-      <Button
+      <button.Button
         onClick={handleSend}
         disabled={!message.trim()}
         className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500"
       >
         전송
-      </Button>
+      </button.Button>
     </div>
   );
 }
