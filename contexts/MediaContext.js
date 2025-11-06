@@ -91,6 +91,134 @@ export function MediaProvider({ children }) {
   }, []);
 
   /**
+   * Phase 19-1: 사용 가능한 미디어 디바이스 목록 조회
+   * @returns {Promise<{videoDevices: Array, audioDevices: Array}>}
+   */
+  const getAvailableDevices = useCallback(async () => {
+    try {
+      console.log("[Phase 19-1] 디바이스 목록 조회 시작");
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      const videoDevices = devices
+        .filter((device) => device.kind === "videoinput")
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `카메라 ${device.deviceId.slice(0, 8)}`,
+        }));
+
+      const audioDevices = devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `마이크 ${device.deviceId.slice(0, 8)}`,
+        }));
+
+      console.log(`[Phase 19-1] 비디오 디바이스: ${videoDevices.length}개`);
+      videoDevices.forEach((d, i) =>
+        console.log(`  [${i}] ${d.label} (${d.deviceId})`)
+      );
+
+      console.log(`[Phase 19-1] 오디오 디바이스: ${audioDevices.length}개`);
+      audioDevices.forEach((d, i) =>
+        console.log(`  [${i}] ${d.label} (${d.deviceId})`)
+      );
+
+      return { videoDevices, audioDevices };
+    } catch (error) {
+      console.error("[Phase 19-1] 디바이스 목록 조회 실패:", error);
+      throw error;
+    }
+  }, []);
+
+  /**
+   * Phase 19-1: 특정 디바이스로 미디어 스트림 초기화
+   * @param {string} videoDeviceId - 선택된 비디오 디바이스 ID
+   * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
+   * @returns {Promise<MediaStream>}
+   */
+  const initializeMediaWithDevice = useCallback(
+    async (videoDeviceId, audioDeviceId) => {
+      try {
+        console.log("[Phase 19-1] 선택된 디바이스로 미디어 초기화 시작");
+        console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
+        console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
+
+        const constraints = {
+          video: videoDeviceId
+            ? {
+                deviceId: { exact: videoDeviceId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+          audio: audioDeviceId
+            ? {
+                deviceId: { exact: audioDeviceId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              }
+            : {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        console.log("[Phase 19-1] 미디어 스트림 획득 성공");
+
+        // 트랙 정보 로깅
+        const audioTracks = stream.getAudioTracks();
+        const videoTracks = stream.getVideoTracks();
+
+        console.log(`로컬 스트림 트랙 정보:`);
+        console.log(
+          `- 비디오 트랙: ${videoTracks.length}개`,
+          videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+        );
+        console.log(
+          `- 오디오 트랙: ${audioTracks.length}개`,
+          audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+        );
+
+        setLocalStream(stream);
+        setIsVideoEnabled(true);
+        setIsAudioEnabled(true);
+
+        return stream;
+      } catch (error) {
+        console.error("[Phase 19-1] 선택된 디바이스로 초기화 실패:", error);
+
+        // 에러 타입별 처리
+        if (error.name === "NotAllowedError") {
+          alert(
+            "카메라와 마이크 권한이 필요합니다. 브라우저 설정에서 권한을 허용해주세요."
+          );
+        } else if (error.name === "NotFoundError") {
+          alert(
+            "선택한 디바이스를 찾을 수 없습니다. 다른 디바이스를 선택해주세요."
+          );
+        } else if (error.name === "NotReadableError") {
+          alert(
+            `선택한 디바이스가 사용 중입니다.\n다른 브라우저나 애플리케이션에서 디바이스를 사용하고 있는지 확인해주세요.\n\n오류: ${error.message}`
+          );
+        } else {
+          alert(`미디어 장치 접근 실패: ${error.message}`);
+        }
+
+        throw error;
+      }
+    },
+    []
+  );
+
+  /**
    * 비디오 활성화/비활성화 토글
    */
   const toggleVideo = useCallback(() => {
@@ -285,6 +413,10 @@ export function MediaProvider({ children }) {
     startScreenShare,
     stopScreenShare,
     cleanupMedia,
+
+    // Phase 19-1: 디바이스 선택 함수
+    getAvailableDevices,
+    initializeMediaWithDevice,
   };
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;

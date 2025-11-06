@@ -6,6 +6,7 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ChatDebugPanel from "@/components/room/ChatDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
+import DeviceSelector from "@/components/room/DeviceSelector";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
@@ -17,7 +18,7 @@ import useWebRTC from "@/hooks/useWebRTC";
 
 /**
  * 방 페이지 컴포넌트
- * 동적 라우팅으로 roomId를 받아 방에 참가하고 미디어를 초기화
+ * Phase 19-3: 디바이스 선택 후 방 입장
  */
 export default function RoomPage() {
   const params = useParams();
@@ -26,11 +27,20 @@ export default function RoomPage() {
 
   // Context 및 Hooks
   const { joinRoom, isConnected, showChat, toggleChat } = useRoomContext();
-  const { localStream, remoteStream, initializeMedia, isVideoEnabled } = useMediaContext();
+  const {
+    localStream,
+    remoteStream,
+    isVideoEnabled,
+    getAvailableDevices,
+    initializeMediaWithDevice,
+  } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
   const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
+
+  // Phase 19-3: 디바이스 선택 완료 상태
+  const [isDeviceSelected, setIsDeviceSelected] = useState(false);
 
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
@@ -42,39 +52,35 @@ export default function RoomPage() {
   const isInitializedRef = useRef(false);
 
   /**
-   * 컴포넌트 마운트 시 방 참가 및 미디어 초기화
+   * Phase 19-3: 디바이스 선택 완료 후 방 입장
    */
+  const handleDeviceSelected = async () => {
+    try {
+      console.log("[RoomPage Phase 19-3] 디바이스 선택 완료, 방 입장 시작");
+      setIsDeviceSelected(true);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: roomId only
-  useEffect(() => {
-    // 이미 초기화되었으면 무시
-    if (isInitializedRef.current) {
-      console.log("이미 초기화되었습니다. 중복 실행 방지");
-      return;
+      // 방 참가
+      await joinRoom(roomId);
+      console.log("[RoomPage Phase 19-3] 방 참가 완료");
+    } catch (error) {
+      console.error("[RoomPage Phase 19-3] 방 참가 실패:", error);
+      alert("방 참가에 실패했습니다. 다시 시도해주세요.");
+      setIsDeviceSelected(false);
     }
+  };
 
-    const initialize = async () => {
-      try {
-        console.log("방 페이지 초기화 시작:", roomId);
-        isInitializedRef.current = true;
-
-        // 1. 미디어 스트림 초기화 (웹캠 + 마이크)
-        await initializeMedia();
-        console.log("미디어 초기화 완료");
-
-        // 2. 방 참가
-        await joinRoom(roomId);
-        console.log("방 참가 완료");
-      } catch (error) {
-        console.error("방 초기화 에러:", error);
-        isInitializedRef.current = false; // 에러 발생 시 재시도 가능하도록
-        alert("방 참가에 실패했습니다. 미디어 권한을 확인해주세요.");
-      }
-    };
-
-    initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]); // roomId가 변경될 때만 실행
+  /**
+   * Phase 19-3: 디바이스 선택 화면 표시
+   */
+  if (!isDeviceSelected) {
+    return (
+      <DeviceSelector
+        onDeviceSelected={handleDeviceSelected}
+        getAvailableDevices={getAvailableDevices}
+        initializeMediaWithDevice={initializeMediaWithDevice}
+      />
+    );
+  }
 
   /**
    * 방 URL 복사 핸들러
