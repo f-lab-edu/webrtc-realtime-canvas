@@ -1,12 +1,13 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ChatDebugPanel from "@/components/room/ChatDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import DeviceSelector from "@/components/room/DeviceSelector";
+import NicknameInput from "@/components/room/NicknameInput";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
@@ -15,10 +16,15 @@ import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
 import useChat from "@/hooks/useChat";
 import useWebRTC from "@/hooks/useWebRTC";
+import { saveNicknameToSession } from "@/lib/nicknameUtils";
 
 /**
  * 방 페이지 컴포넌트
- * Phase 19-3: 디바이스 선택 후 방 입장
+ *
+ * 방 입장 플로우:
+ * 1. 닉네임 입력 (하이브리드 방식: 세션 스토리지에서 기본 닉네임 로드)
+ * 2. 디바이스 선택 (Phase 19-3)
+ * 3. 방 참가
  */
 export default function RoomPage() {
   const params = useParams();
@@ -26,7 +32,7 @@ export default function RoomPage() {
   const router = useRouter();
 
   // Context 및 Hooks
-  const { joinRoom, isConnected, showChat, toggleChat } = useRoomContext();
+  const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
   const {
     localStream,
     remoteStream,
@@ -39,6 +45,20 @@ export default function RoomPage() {
   // 채팅 훅
   const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
 
+  // 닉네임 설정 완료 상태
+  const [isNicknameSet, setIsNicknameSet] = useState(false);
+
+  // remoteStream 디버깅
+  useEffect(() => {
+    console.log("[RoomPage] remoteStream 상태 변경:", {
+      hasRemoteStream: !!remoteStream,
+      streamId: remoteStream?.id,
+      active: remoteStream?.active,
+      videoTracks: remoteStream?.getVideoTracks().length,
+      audioTracks: remoteStream?.getAudioTracks().length,
+    });
+  }, [remoteStream]);
+
   // Phase 19-3: 디바이스 선택 완료 상태
   const [isDeviceSelected, setIsDeviceSelected] = useState(false);
 
@@ -48,8 +68,18 @@ export default function RoomPage() {
   // URL 복사 성공 상태
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // 초기화 상태 (ref로 관리하여 중복 실행 방지)
-  const isInitializedRef = useRef(false);
+  /**
+   * 닉네임 설정 완료 핸들러
+   * 닉네임 설정 후 디바이스 선택 단계로 진행
+   */
+  const handleNicknameSet = (nickname) => {
+    console.log("[RoomPage] 닉네임 설정 완료:", nickname);
+    setNickname(nickname); // RoomContext에 닉네임 설정
+    setIsNicknameSet(true);
+
+    // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
+    saveNicknameToSession(nickname);
+  };
 
   /**
    * Phase 19-3: 디바이스 선택 완료 후 방 입장
@@ -70,7 +100,14 @@ export default function RoomPage() {
   };
 
   /**
-   * Phase 19-3: 디바이스 선택 화면 표시
+   * 닉네임 입력 화면 표시 (첫 번째 단계)
+   */
+  if (!isNicknameSet) {
+    return <NicknameInput onNicknameSet={handleNicknameSet} roomId={roomId} />;
+  }
+
+  /**
+   * Phase 19-3: 디바이스 선택 화면 표시 (두 번째 단계)
    */
   if (!isDeviceSelected) {
     return (

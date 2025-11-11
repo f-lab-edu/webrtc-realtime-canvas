@@ -65,10 +65,24 @@ export default function VideoPlayer({
         console.log(
           `🎬 [${playerType} Phase 18-2] 원격 스트림 수신, 즉시 재생 시작 (SimplePeer 공식 패턴)`
         );
+        console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
+        console.log(`   - videoElement.paused: ${videoElement.paused}`);
+        console.log(`   - videoElement.muted: ${videoElement.muted}`);
+
         videoElement
           .play()
-          .then(() => console.log(`✅ [${playerType}] 재생 성공`))
-          .catch((err) => console.error(`❌ [${playerType}] 재생 실패:`, err));
+          .then(() => {
+            console.log(`✅ [${playerType}] 재생 성공`);
+            console.log(`   - readyState: ${videoElement.readyState}`);
+            console.log(`   - paused: ${videoElement.paused}`);
+            console.log(`   - currentTime: ${videoElement.currentTime}`);
+          })
+          .catch((err) => {
+            console.error(`❌ [${playerType}] 재생 실패:`, err);
+            console.error(`   - error.name: ${err.name}`);
+            console.error(`   - error.message: ${err.message}`);
+            console.error(`   - readyState: ${videoElement.readyState}`);
+          });
       } else {
         // 로컬 비디오는 autoPlay 속성으로 자동 재생
         console.log(`📹 [${playerType}] 로컬 비디오, autoPlay 사용`);
@@ -116,6 +130,18 @@ export default function VideoPlayer({
       videoElement.srcObject = null;
     }
   }, [stream, isLocal, label]);
+
+  // 렌더링 디버깅
+  const playerType = label || (isLocal ? "로컬" : "원격");
+  const isVideoVisible = isLocal ? isVideoEnabled && stream : stream;
+
+  console.log(`[VideoPlayer 렌더링] ${playerType}:`, {
+    hasStream: !!stream,
+    streamId: stream?.id,
+    isVideoVisible,
+    isLocal,
+    isVideoEnabled,
+  });
 
   return (
     <div className="relative w-full h-full bg-gray-900 rounded-lg overflow-hidden">

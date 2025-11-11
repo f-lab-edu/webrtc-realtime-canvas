@@ -10,7 +10,7 @@ import { useRoomContext } from "@/contexts/RoomContext";
  */
 function useWebRTC() {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, participants } = useRoomContext();
+  const { socketService, roomId, participants, nickname, participantNicknames } = useRoomContext();
   const { webrtcService, localStream, setRemoteStream } = useMediaContext();
 
   // WebRTC 연결 상태
@@ -31,6 +31,8 @@ function useWebRTC() {
   const socketServiceRef = useRef(socketService);
   const webrtcServiceRef = useRef(webrtcService);
   const setRemoteStreamRef = useRef(setRemoteStream);
+  const nicknameRef = useRef(nickname);
+  const participantNicknamesRef = useRef(participantNicknames);
 
   // ref 업데이트
   useEffect(() => {
@@ -38,7 +40,9 @@ function useWebRTC() {
     socketServiceRef.current = socketService;
     webrtcServiceRef.current = webrtcService;
     setRemoteStreamRef.current = setRemoteStream;
-  }, [localStream, socketService, webrtcService, setRemoteStream]);
+    nicknameRef.current = nickname;
+    participantNicknamesRef.current = participantNicknames;
+  }, [localStream, socketService, webrtcService, setRemoteStream, nickname, participantNicknames]);
 
   /**
    * WebRTC 연결 초기화
@@ -105,18 +109,22 @@ function useWebRTC() {
             return;
           }
 
-          const target = targetSocketIdRef.current;
+          const targetSocketId = targetSocketIdRef.current;
+          const myNickname = nicknameRef.current || "알 수 없음";
+          const targetNickname =
+            participantNicknamesRef.current.get(targetSocketId) || "알 수 없음";
 
+          // 서버는 to 필드로 socketId 문자열을 기대함
           if (signal.type === "offer") {
-            console.log(`Offer 전송 -> ${target}`);
-            socketServiceRef.current.emit("signal:offer", { to: target, signal });
+            console.log(`[송신] [${myNickname}] WebRTC Offer -> ${targetNickname}`);
+            socketServiceRef.current.emit("signal:offer", { to: targetSocketId, signal });
           } else if (signal.type === "answer") {
-            console.log(`Answer 전송 -> ${target}`);
-            socketServiceRef.current.emit("signal:answer", { to: target, signal });
+            console.log(`[송신] [${myNickname}] WebRTC Answer -> ${targetNickname}`);
+            socketServiceRef.current.emit("signal:answer", { to: targetSocketId, signal });
           } else {
-            console.log(`ICE candidate 전송 -> ${target}`);
+            console.log(`[송신] [${myNickname}] ICE Candidate -> ${targetNickname}`);
             socketServiceRef.current.emit("signal:ice-candidate", {
-              to: target,
+              to: targetSocketId,
               candidate: signal,
             });
           }
@@ -154,13 +162,15 @@ function useWebRTC() {
           });
 
           console.log(`\n📡 setRemoteStream 호출 전:`);
-          console.log(`   - 이전 remoteStream: ${setRemoteStreamRef.current.toString()}`);
+          console.log(`   - stream 객체:`, stream);
+          console.log(`   - stream.id:`, stream.id);
+          console.log(`   - stream.active:`, stream.active);
 
           setRemoteStream(stream); // ✅ 직접 호출로 상태 업데이트
-          setRemoteStreamRef.current(stream); // ref도 업데이트 (백업용)
           setConnectionState("connected");
 
           console.log(`✅ setRemoteStream 호출 완료`);
+          console.log(`   - 전달된 stream:`, stream);
           console.log(`   - React 상태 업데이트 대기 중 (리렌더링 예상)`);
           console.log(`========== [useWebRTC onStream 종료] ==========\n`);
         });
@@ -351,8 +361,18 @@ function useWebRTC() {
     listenersRegisteredRef.current = true;
 
     // 새 참가자 입장 이벤트
-    const handleParticipantJoined = (targetSocketId) => {
-      console.log(`[이벤트] 새 참가자 입장: ${targetSocketId}`);
+    const handleParticipantJoined = (data) => {
+      // 서버에서 { socketId, nickname } 형태로 전달됨
+      const targetSocketId = typeof data === "string" ? data : data.socketId;
+      const targetNickname = typeof data === "object" ? data.nickname : null;
+
+      console.log(`[이벤트] 새 참가자 입장: ${targetSocketId} (${targetNickname || "알 수 없음"})`);
+
+      // 닉네임 정보가 있으면 저장
+      if (targetNickname) {
+        participantNicknamesRef.current.set(targetSocketId, targetNickname);
+      }
+
       // tryStartConnection 함수로 통합 처리 (선입장자가 initiator)
       tryStartConnection(targetSocketId, true);
     };
@@ -360,7 +380,9 @@ function useWebRTC() {
     // Offer 수신 이벤트
     const handleOffer = (data) => {
       const { from, signal } = data;
-      console.log(`[이벤트] Offer 수신 from ${from}`);
+      const myNickname = nicknameRef.current || "알 수 없음";
+      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
+      console.log(`[수신] [${myNickname}] WebRTC Offer <- ${senderNickname}`);
 
       if (socketServiceRef.current.socket?.id === from) {
         console.warn("자기 자신으로부터 온 Offer입니다. 무시");
@@ -408,7 +430,9 @@ function useWebRTC() {
     // Answer 수신 이벤트
     const handleAnswer = (data) => {
       const { from } = data;
-      console.log(`[이벤트] Answer 수신 from ${from}`);
+      const myNickname = nicknameRef.current || "알 수 없음";
+      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
+      console.log(`[수신] [${myNickname}] WebRTC Answer <- ${senderNickname}`);
 
       if (socketServiceRef.current.socket?.id === from) {
         console.warn("자기 자신으로부터 온 Answer입니다. 무시");
@@ -431,7 +455,9 @@ function useWebRTC() {
     // ICE candidate 수신 이벤트
     const handleIceCandidate = (data) => {
       const { from } = data;
-      console.log(`[이벤트] ICE candidate 수신 from ${from}`);
+      const myNickname = nicknameRef.current || "알 수 없음";
+      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
+      console.log(`[수신] [${myNickname}] ICE Candidate <- ${senderNickname}`);
 
       if (socketServiceRef.current.socket?.id === from) {
         console.warn("자기 자신으로부터 온 ICE candidate입니다. 무시");
@@ -513,10 +539,10 @@ function useWebRTC() {
 
     if (otherParticipants.length > 0) {
       console.log(
-        `[useWebRTC] 기존 참가자 감지: ${otherParticipants[0]}, 연결 시작 시도 (후입장자 역할)`
+        `[useWebRTC] 기존 참가자 감지: ${otherParticipants[0]}, Offer 대기 중 (후입장자 역할)`
       );
-      // 후입장자는 수신자(initiator: false)로 연결 - Offer를 기다려서 Answer 생성
-      tryStartConnection(otherParticipants[0], false);
+      // 후입장자는 기존 참가자로부터 Offer를 기다림 (연결 시작하지 않음)
+      // 기존 참가자가 room:participant-joined 이벤트를 받아서 Offer를 보낼 것임
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants]); // participants가 변경될 때만 실행

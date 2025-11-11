@@ -15,7 +15,7 @@ import ChatService from "@/services/ChatService";
  */
 function useChat() {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, isConnected } = useRoomContext();
+  const { socketService, roomId, isConnected, nickname } = useRoomContext();
 
   // ChatService 인스턴스 (ref로 관리)
   const chatServiceRef = useRef(null);
@@ -45,11 +45,11 @@ function useChat() {
 
     // ChatService 인스턴스 생성 또는 업데이트
     if (!chatServiceRef.current) {
-      chatServiceRef.current = new ChatService(socketId);
-      console.log("ChatService 초기화 완료");
+      chatServiceRef.current = new ChatService(socketId, nickname);
+      console.log("ChatService 초기화 완료, 닉네임:", nickname);
     } else {
-      // Socket ID 업데이트 (재연결 시)
-      chatServiceRef.current.updateCurrentUser(socketId);
+      // Socket ID 및 닉네임 업데이트 (재연결 시)
+      chatServiceRef.current.updateCurrentUser(socketId, nickname);
     }
 
     // 현재 사용자 정보 업데이트
@@ -117,7 +117,21 @@ function useChat() {
       socketService.off("chat:message", handleChatMessage);
       socketService.off("chat:error", handleChatError);
     };
-  }, [socketService, isConnected]);
+  }, [socketService, isConnected, nickname]);
+
+  /**
+   * 닉네임 변경 시 ChatService 업데이트
+   */
+  useEffect(() => {
+    if (chatServiceRef.current && socketService && nickname) {
+      const socketId = socketService.getSocketId();
+      if (socketId) {
+        chatServiceRef.current.updateCurrentUser(socketId, nickname);
+        setCurrentUser(chatServiceRef.current.getCurrentUser());
+        console.log("닉네임 변경으로 ChatService 업데이트:", nickname);
+      }
+    }
+  }, [nickname, socketService]);
 
   /**
    * 메시지 전송

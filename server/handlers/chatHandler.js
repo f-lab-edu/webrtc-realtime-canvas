@@ -23,7 +23,6 @@ const registerChatHandlers = (io, socket, roomManager) => {
    */
   socket.on("chat:message", (data) => {
     serverLogger.info("CHAT", `이벤트 수신 from ${socket.id}`, data);
-    console.log(`[chat:message] 이벤트 수신 from ${socket.id}:`, JSON.stringify(data, null, 2));
 
     // Zod로 파라미터 검증
     const result = chatMessageSchema.safeParse(data);
@@ -84,14 +83,15 @@ const registerChatHandlers = (io, socket, roomManager) => {
       return;
     }
 
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+
     serverLogger.info("CHAT", `메시지 수신 from ${socket.id}`, {
       roomId,
       messageId: message.id,
       content: message.content,
     });
-    console.log(
-      `[chat:message] 방 ${roomId}에서 메시지 수신 from ${socket.id}: "${message.content}"`
-    );
+    console.log(`[수신] [${senderNickname}] 방 ${roomId}에서 메시지: "${message.content}"`);
 
     // 참가자 활동 시간 업데이트
     try {
@@ -121,13 +121,12 @@ const registerChatHandlers = (io, socket, roomManager) => {
 
     serverLogger.info("CHAT", "메시지 중계", { roomId, relayData, socketsInRoom });
     console.log(
-      `[chat:message] 방 ${roomId}의 다른 참가자들에게 메시지 중계:`,
-      JSON.stringify(relayData, null, 2)
+      `[송신] [${senderNickname}] 방 ${roomId}의 다른 참가자들에게 메시지 중계: "${message.content}"`
     );
     socket.to(roomId).emit("chat:message", relayData);
 
     serverLogger.info("CHAT", "메시지 중계 완료", { roomId, messageId: message.id });
-    console.log(`[chat:message] 방 ${roomId}의 다른 참가자들에게 메시지 중계 완료`);
+    console.log(`[송신] [${senderNickname}] 방 ${roomId}의 다른 참가자들에게 메시지 중계 완료`);
   });
 };
 
