@@ -4,7 +4,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
-import ChatDebugPanel from "@/components/room/ChatDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import DeviceSelector from "@/components/room/DeviceSelector";
 import NicknameInput from "@/components/room/NicknameInput";
@@ -14,6 +13,7 @@ import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import { WhiteboardProvider } from "@/contexts/WhiteboardContext";
 import useChat from "@/hooks/useChat";
 import useWebRTC from "@/hooks/useWebRTC";
 import { saveNicknameToSession } from "@/lib/nicknameUtils";
@@ -141,24 +141,23 @@ export default function RoomPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-950">
       {/* 상단 헤더 */}
-      <header className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-800">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-white">방: {roomId}</h1>
+      <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold text-white">방: {roomId}</h1>
           {isConnected && <span className="text-sm text-green-400">● 연결됨</span>}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             onClick={() => router.push("/")}
             variant="outline"
             size="sm"
-            className="text-white"
+            className="text-white h-8"
             title="홈으로"
           >
             🏠 홈
           </Button>
-
-          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white">
+          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white h-8">
             {copySuccess ? "✅ 복사됨" : "🔗 링크 복사"}
           </Button>
 
@@ -166,7 +165,7 @@ export default function RoomPage() {
             onClick={toggleChat}
             variant="outline"
             size="sm"
-            className="text-white relative"
+            className="text-white relative h-8"
             title={showChat ? "채팅 숨기기" : "채팅 보기"}
           >
             {showChat ? "💬" : "◀"}
@@ -176,6 +175,17 @@ export default function RoomPage() {
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
+          </Button>
+
+          {/* 오디오 디버그 토글 버튼 */}
+          <Button
+            onClick={() => setShowDebug(!showDebug)}
+            variant="outline"
+            size="sm"
+            className="text-white h-8"
+            title={showDebug ? "디버그 숨기기" : "디버그 보기"}
+          >
+            {showDebug ? "🔇" : "🔊"}
           </Button>
         </div>
       </header>
@@ -193,10 +203,12 @@ export default function RoomPage() {
 
         {/* 중앙: 화이트보드 (50%) */}
         <main className="flex-[5] flex flex-col min-h-0 overflow-hidden">
-          <WhiteboardToolbar />
-          <div className="flex-1 min-h-0">
-            <WhiteboardCanvas />
-          </div>
+          <WhiteboardProvider>
+            <WhiteboardToolbar />
+            <div className="flex-1 min-h-0">
+              <WhiteboardCanvas />
+            </div>
+          </WhiteboardProvider>
         </main>
 
         {/* 오른쪽: 채팅 영역 (20%) */}
@@ -217,18 +229,6 @@ export default function RoomPage() {
 
       {/* 오디오 디버그 패널 (개발 중에만 표시) */}
       {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}
-
-      {/* 채팅 디버그 패널 */}
-      <ChatDebugPanel />
-
-      {/* 디버그 패널 토글 버튼 */}
-      <button
-        type="button"
-        onClick={() => setShowDebug(!showDebug)}
-        className="fixed bottom-4 left-4 bg-gray-800 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-700 z-50"
-      >
-        {showDebug ? "🔇 디버그 숨기기" : "🔊 디버그 보기"}
-      </button>
     </div>
   );
 }

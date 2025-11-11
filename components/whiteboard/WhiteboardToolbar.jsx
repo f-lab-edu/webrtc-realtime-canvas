@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import useWhiteboard from "@/hooks/useWhiteboard";
+import { useWhiteboard } from "@/contexts/WhiteboardContext";
 
 /**
  * WhiteboardToolbar 컴포넌트
