@@ -45,14 +45,17 @@ describe("Socket 이벤트 핸들러", () => {
       const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 방 참가 이벤트 발생
-      joinHandler("room-1");
+      joinHandler({ roomId: "room-1", nickname: "테스트유저" });
 
       // Then: 성공 응답 전송
       expect(mockSocket.join).toHaveBeenCalledWith("room-1");
-      expect(mockSocket.emit).toHaveBeenCalledWith("room:joined", {
-        roomId: "room-1",
-        participants: [],
-      });
+      expect(mockSocket.emit).toHaveBeenCalledWith(
+        "room:joined",
+        expect.objectContaining({
+          roomId: "room-1",
+          participants: [],
+        })
+      );
     });
 
     it("방 정원이 초과되면 room:full 이벤트를 보낸다", () => {
@@ -64,7 +67,7 @@ describe("Socket 이벤트 핸들러", () => {
       const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 3번째 참가자가 입장 시도
-      joinHandler("room-1");
+      joinHandler({ roomId: "room-1" });
 
       // Then: room:full 이벤트 전송
       expect(mockSocket.emit).toHaveBeenCalledWith("room:full");
@@ -77,12 +80,15 @@ describe("Socket 이벤트 핸들러", () => {
       const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
       // When: 유효하지 않은 방 ID로 참가 시도
-      joinHandler(null);
+      joinHandler({ roomId: null });
 
       // Then: 에러 응답 전송
-      expect(mockSocket.emit).toHaveBeenCalledWith("error", {
-        message: "유효하지 않은 방 ID",
-      });
+      expect(mockSocket.emit).toHaveBeenCalledWith(
+        "error",
+        expect.objectContaining({
+          message: "유효하지 않은 방 ID",
+        })
+      );
     });
   });
 
@@ -232,7 +238,7 @@ describe("Socket 이벤트 핸들러", () => {
       // Given: 방에 참가한 상태
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
-      joinHandler("room-1");
+      joinHandler({ roomId: "room-1" });
 
       // When: 연결 해제
       const disconnectHandler = mockSocket.on.mock.calls.find(

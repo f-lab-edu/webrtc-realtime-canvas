@@ -28,6 +28,7 @@ class RoomManager {
     const room = {
       id: validatedRoomId,
       participants: new Set(),
+      participantNicknames: new Map(),
       createdAt: new Date(),
       maxParticipants: 2,
     };
@@ -103,6 +104,9 @@ class RoomManager {
     const removed = room.participants.delete(validatedSocketId);
 
     if (removed) {
+      // 닉네임도 함께 삭제
+      room.participantNicknames.delete(validatedSocketId);
+
       console.log(
         `참가자 제거됨: ${validatedSocketId} <- 방: ${validatedRoomId}, 남은 인원: ${room.participants.size}`
       );
@@ -212,6 +216,64 @@ class RoomManager {
 
     room.participantActivity.set(validatedSocketId, new Date());
     console.log(`참가자 ${validatedSocketId} 활동 시간 업데이트`);
+  }
+
+  /**
+   * 참가자 닉네임 설정
+   * @param {string} roomId - 방 고유 식별자
+   * @param {string} socketId - 참가자 소켓 ID
+   * @param {string} nickname - 닉네임
+   */
+  setParticipantNickname(roomId, socketId, nickname) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    const room = this.getRoom(validatedRoomId);
+    if (!room) {
+      console.log(`방을 찾을 수 없음: ${validatedRoomId}`);
+      return;
+    }
+
+    // 닉네임 저장
+    room.participantNicknames.set(validatedSocketId, nickname);
+    console.log(`닉네임 설정됨: ${validatedSocketId} -> "${nickname}" (방: ${validatedRoomId})`);
+  }
+
+  /**
+   * 참가자 닉네임 조회
+   * @param {string} socketId - 참가자 소켓 ID
+   * @returns {string|null} 닉네임 또는 null
+   */
+  getParticipantNickname(socketId) {
+    // Zod로 파라미터 검증
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    // 해당 소켓이 속한 방 찾기
+    for (const room of this.rooms.values()) {
+      if (room.participants.has(validatedSocketId)) {
+        return room.participantNicknames.get(validatedSocketId) || null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 방의 모든 참가자 닉네임 조회
+   * @param {string} roomId - 방 고유 식별자
+   * @returns {Map<socketId, nickname>} 참가자 닉네임 맵
+   */
+  getAllParticipantNicknames(roomId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+
+    const room = this.getRoom(validatedRoomId);
+    if (!room) {
+      return new Map();
+    }
+
+    return new Map(room.participantNicknames);
   }
 
   /**

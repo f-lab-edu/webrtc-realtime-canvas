@@ -10,6 +10,24 @@ class SocketService {
     this.socket = null;
     this.serverUrl = null;
     this.isConnected = false;
+    this.nickname = null; // 현재 사용자 닉네임
+  }
+
+  /**
+   * 닉네임 설정
+   * @param {string} nickname - 설정할 닉네임
+   */
+  setNickname(nickname) {
+    this.nickname = nickname;
+    console.log("SocketService 닉네임 설정:", nickname);
+  }
+
+  /**
+   * 닉네임 가져오기
+   * @returns {string|null}
+   */
+  getNickname() {
+    return this.nickname;
   }
 
   /**
@@ -97,7 +115,9 @@ class SocketService {
       return;
     }
 
-    console.log(`[SocketService] emit 이벤트: ${event}`, data);
+    // 닉네임 포함 로그 출력
+    const nicknameLabel = this.nickname || "알 수 없음";
+    console.log(`[송신] [${nicknameLabel}] ${event}:`, data);
     this.socket.emit(event, data);
   }
 
@@ -112,8 +132,14 @@ class SocketService {
       return;
     }
 
-    console.log(`[SocketService] 이벤트 리스너 등록: ${event}`);
-    this.socket.on(event, handler);
+    // 닉네임 포함 로그를 위한 래퍼 핸들러
+    const wrappedHandler = (data) => {
+      const nicknameLabel = this.nickname || "알 수 없음";
+      console.log(`[수신] [${nicknameLabel}] ${event}:`, data);
+      handler(data);
+    };
+
+    this.socket.on(event, wrappedHandler);
   }
 
   /**

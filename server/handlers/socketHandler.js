@@ -6,6 +6,7 @@ import {
   iceCandidateSchema,
   roomJoinSchema,
   roomLeaveSchema,
+  setNicknameSchema,
   signalSchema,
   whiteboardEventSchema,
 } from "../schemas/socketSchemas.js";
@@ -26,12 +27,53 @@ const registerSocketHandlers = (io, socket, roomManager) => {
   let currentRoomId = null;
 
   /**
+   * user:set-nickname 이벤트 핸들러
+   * 클라이언트가 닉네임을 설정할 때 호출됨
+   */
+  socket.on("user:set-nickname", (data) => {
+    // Zod로 파라미터 검증
+    const result = setNicknameSchema.safeParse(data);
+
+    if (!result.success) {
+      socket.emit("user:nickname-error", {
+        message: "유효하지 않은 닉네임",
+        details: result.error.errors,
+      });
+      return;
+    }
+
+    const { nickname } = result.data;
+    console.log(`[user:set-nickname] 소켓 ${socket.id}가 닉네임 설정: "${nickname}"`);
+
+    // 현재 참가 중인 방 찾기
+    const roomId = roomManager.getRoomIdBySocketId(socket.id);
+    if (!roomId) {
+      console.log(`[user:set-nickname] 소켓 ${socket.id}가 참가 중인 방이 없습니다`);
+      socket.emit("user:nickname-error", {
+        message: "방에 참가하지 않았습니다",
+      });
+      return;
+    }
+
+    // RoomManager에 닉네임 저장
+    roomManager.setParticipantNickname(roomId, socket.id, nickname);
+
+    // 방의 모든 참가자들에게 닉네임 브로드캐스트
+    io.to(roomId).emit("user:nickname-updated", {
+      socketId: socket.id,
+      nickname,
+    });
+
+    console.log(`[user:set-nickname] 방 ${roomId}의 참가자들에게 닉네임 브로드캐스트 완료`);
+  });
+
+  /**
    * room:join 이벤트 핸들러
    * 클라이언트가 방에 참가할 때 호출됨
    */
-  socket.on("room:join", (roomId) => {
+  socket.on("room:join", (data) => {
     // Zod로 파라미터 검증
-    const result = roomJoinSchema.safeParse({ roomId });
+    const result = roomJoinSchema.safeParse(data);
 
     if (!result.success) {
       socket.emit("error", {
@@ -41,8 +83,10 @@ const registerSocketHandlers = (io, socket, roomManager) => {
       return;
     }
 
-    const { roomId: validatedRoomId } = result.data;
-    console.log(`[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도`);
+    const { roomId: validatedRoomId, nickname } = result.data;
+    console.log(
+      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도, 닉네임: ${nickname || "없음"}`
+    );
 
     // 기존 방에서 나가기
     if (currentRoomId) {
@@ -69,24 +113,39 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     socket.join(validatedRoomId);
     currentRoomId = validatedRoomId;
 
+    // 닉네임이 제공된 경우 저장
+    if (nickname) {
+      roomManager.setParticipantNickname(validatedRoomId, socket.id, nickname);
+      console.log(`[room:join] 소켓 ${socket.id}의 닉네임 저장: ${nickname}`);
+    }
+
     // 현재 방의 다른 참가자 목록 조회
     const participants = roomManager
       .getRoomParticipants(validatedRoomId)
       .filter((id) => id !== socket.id);
 
-    // 참가 성공 응답
+    // 참가자 닉네임 맵 조회
+    const participantNicknames = roomManager.getAllParticipantNicknames(validatedRoomId);
+    const nicknamesObject = Object.fromEntries(participantNicknames);
+
+    // 참가 성공 응답 (닉네임 포함)
     socket.emit("room:joined", {
       roomId: validatedRoomId,
       participants,
+      participantNicknames: nicknamesObject,
     });
 
     console.log(
       `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId}에 참가 완료, 기존 참가자: ${participants.length}명`
     );
 
-    // 방의 다른 참가자들에게 새 참가자 알림
-    socket.to(validatedRoomId).emit("room:participant-joined", socket.id);
-    console.log(`[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송`);
+    // 방의 다른 참가자들에게 새 참가자 알림 (닉네임 포함)
+    const newParticipantNickname = roomManager.getParticipantNickname(socket.id);
+    socket.to(validatedRoomId).emit("room:participant-joined", {
+      socketId: socket.id,
+      nickname: newParticipantNickname,
+    });
+    console.log(`[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송, 닉네임: ${newParticipantNickname || "없음"}`);
   });
 
   /**
@@ -127,7 +186,12 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { to, signal } = result.data;
-    console.log(`[signal:offer] ${socket.id} -> ${to}`);
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:offer`);
 
     // 대상 소켓에게 offer 전달
     io.to(to).emit("signal:offer", {
@@ -153,7 +217,12 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { to, signal } = result.data;
-    console.log(`[signal:answer] ${socket.id} -> ${to}`);
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:answer`);
 
     // 대상 소켓에게 answer 전달
     io.to(to).emit("signal:answer", {
@@ -179,7 +248,12 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { to, candidate } = result.data;
-    console.log(`[signal:ice-candidate] ${socket.id} -> ${to}`);
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:ice-candidate`);
 
     // 대상 소켓에게 ICE candidate 전달
     io.to(to).emit("signal:ice-candidate", {

@@ -88,7 +88,7 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
       // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
       const saved = saveNicknameToSession(nickname);
       if (!saved) {
-        console.warn("[NicknameInput] 세션 스토리지 저장 실패, 계속 진행");
+        console.log("[NicknameInput] 세션 스토리지 저장 실패, 계속 진행");
       }
 
       console.log("[NicknameInput] 닉네임 설정 완료:", nickname);
