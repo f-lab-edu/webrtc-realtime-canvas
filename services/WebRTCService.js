@@ -79,13 +79,22 @@ class WebRTCService {
         audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
       );
 
+      // 개발 환경 체크
+      const isDevelopment = process.env.NODE_ENV === "development";
+
       // SimplePeer 인스턴스 생성
       this.peer = new SimplePeer({
         initiator,
         stream,
-        trickle: true, // ICE candidate를 즉시 전송
+        // 개발 환경: trickle false (안정성 우선)
+        // 프로덕션: trickle true (성능 우선)
+        trickle: !isDevelopment,
         config: config.iceServers ? config : defaultConfig,
       });
+
+      console.log(
+        `WebRTC 초기화 - 환경: ${isDevelopment ? "개발" : "프로덕션"}, trickle: ${!isDevelopment}`
+      );
 
       // Phase 17: peer.on('signal') 첫 호출 시 ICE/Connection 모니터링 설정
       let isMonitoringSetup = false;
@@ -106,9 +115,7 @@ class WebRTCService {
             console.log(`🧊 [Phase 17] ICE Connection State: ${state}`);
 
             if (state === "failed") {
-              console.error(
-                "❌ ICE Connection Failed - TURN 서버 필요할 수 있음"
-              );
+              console.error("❌ ICE Connection Failed - TURN 서버 필요할 수 있음");
             }
           };
 
@@ -129,17 +136,11 @@ class WebRTCService {
               if (this.handlers.connect) {
                 this.handlers.connect();
               } else {
-                console.warn(
-                  "⚠️ [WebRTCService Phase 17] connect 핸들러 미등록 (타이밍 이슈)"
-                );
+                console.log("⚠️ [WebRTCService Phase 17] connect 핸들러 미등록 (타이밍 이슈)");
               }
             }
 
-            if (
-              state === "failed" ||
-              state === "disconnected" ||
-              state === "closed"
-            ) {
+            if (state === "failed" || state === "disconnected" || state === "closed") {
               console.error(`❌ RTCPeerConnection State: ${state}`);
               if (this.handlers.close) {
                 this.handlers.close();
@@ -148,9 +149,7 @@ class WebRTCService {
           };
 
           isMonitoringSetup = true;
-          console.log(
-            "✅ [WebRTCService Phase 17] ICE/Connection 모니터링 설정 완료"
-          );
+          console.log("✅ [WebRTCService Phase 17] ICE/Connection 모니터링 설정 완료");
         }
 
         // 기존 시그널 핸들러 호출
@@ -197,9 +196,7 @@ class WebRTCService {
           console.log(`⏳ [WebRTCService] 비디오 트랙 muted, unmute 대기 중...`);
 
           const handleUnmute = () => {
-            console.log(
-              `🔊 [WebRTCService] 비디오 트랙 unmute됨, React 상태 업데이트 시작`
-            );
+            console.log(`🔊 [WebRTCService] 비디오 트랙 unmute됨, React 상태 업데이트 시작`);
             this.remoteStream = stream;
             if (this.handlers.stream) {
               this.handlers.stream(stream);
@@ -211,9 +208,7 @@ class WebRTCService {
           // 3초 타임아웃
           setTimeout(() => {
             if (videoTrack.muted) {
-              console.warn(
-                `⚠️ [WebRTCService] Unmute 타임아웃 (3초), 강제 전달`
-              );
+              console.log(`⚠️ [WebRTCService] Unmute 타임아웃 (3초), 강제 전달`);
               videoTrack.removeEventListener("unmute", handleUnmute);
             }
             // 타임아웃이어도 전달 (VideoPlayer에서 처리)
@@ -224,9 +219,7 @@ class WebRTCService {
           }, 3000);
         } else {
           // 이미 unmuted이거나 비디오 트랙 없으면 즉시 전달
-          console.log(
-            `✅ [WebRTCService] 비디오 트랙 이미 unmuted, 즉시 전달`
-          );
+          console.log(`✅ [WebRTCService] 비디오 트랙 이미 unmuted, 즉시 전달`);
           this.remoteStream = stream;
           if (this.handlers.stream) {
             this.handlers.stream(stream);
@@ -236,13 +229,9 @@ class WebRTCService {
         // Phase 18-1: peer.on('stream')을 P2P 연결 완료 신호로 사용
         // SimplePeer는 video/audio 전용 연결에서 peer.on('connect') 이벤트를 발생시키지 않음
         // (connect 이벤트는 data channel이 있을 때만 발생)
-        console.log(
-          `🎬 [WebRTCService Phase 18-1] peer.on('stream') 수신 = P2P 연결 완료`
-        );
+        console.log(`🎬 [WebRTCService Phase 18-1] peer.on('stream') 수신 = P2P 연결 완료`);
         if (this.handlers.connect) {
-          console.log(
-            `✅ [WebRTCService Phase 18-1] connect 핸들러 호출 (stream 기반)`
-          );
+          console.log(`✅ [WebRTCService Phase 18-1] connect 핸들러 호출 (stream 기반)`);
           this.handlers.connect();
         }
 
@@ -318,7 +307,7 @@ class WebRTCService {
         sender.replaceTrack(newTrack);
         console.log("미디어 트랙 교체 완료");
       } else {
-        console.warn("교체할 트랙을 찾을 수 없습니다.");
+        console.log("교체할 트랙을 찾을 수 없습니다.");
       }
     } catch (error) {
       console.error("트랙 교체 에러:", error);
