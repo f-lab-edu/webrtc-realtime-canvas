@@ -10,6 +10,25 @@ class SocketService {
     this.socket = null;
     this.serverUrl = null;
     this.isConnected = false;
+    this.nickname = null; // 현재 사용자 닉네임
+    this.handlerMap = new Map(); // 원본 핸들러 -> 래퍼 핸들러 매핑
+  }
+
+  /**
+   * 닉네임 설정
+   * @param {string} nickname - 설정할 닉네임
+   */
+  setNickname(nickname) {
+    this.nickname = nickname;
+    console.log("SocketService 닉네임 설정:", nickname);
+  }
+
+  /**
+   * 닉네임 가져오기
+   * @returns {string|null}
+   */
+  getNickname() {
+    return this.nickname;
   }
 
   /**
@@ -83,6 +102,7 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
+      this.handlerMap.clear(); // 핸들러 맵 초기화
     }
   }
 
@@ -97,6 +117,9 @@ class SocketService {
       return;
     }
 
+    // 닉네임 포함 로그 출력
+    const nicknameLabel = this.nickname || "알 수 없음";
+    console.log(`[송신] [${nicknameLabel}] ${event}:`, data);
     this.socket.emit(event, data);
   }
 
@@ -111,7 +134,24 @@ class SocketService {
       return;
     }
 
-    this.socket.on(event, handler);
+    // 이미 등록된 핸들러인지 확인
+    const key = `${event}:${handler}`;
+    if (this.handlerMap.has(key)) {
+      console.warn(`[SocketService] 이미 등록된 핸들러입니다: ${event}`);
+      return;
+    }
+
+    // 닉네임 포함 로그를 위한 래퍼 핸들러
+    const wrappedHandler = (data) => {
+      const nicknameLabel = this.nickname || "알 수 없음";
+      console.log(`[수신] [${nicknameLabel}] ${event}:`, data);
+      handler(data);
+    };
+
+    // 래퍼 핸들러를 Map에 저장 (나중에 제거할 수 있도록)
+    this.handlerMap.set(key, wrappedHandler);
+
+    this.socket.on(event, wrappedHandler);
   }
 
   /**
@@ -126,10 +166,28 @@ class SocketService {
     }
 
     if (handler) {
-      this.socket.off(event, handler);
+      // Map에서 래퍼 핸들러 찾기
+      const key = `${event}:${handler}`;
+      const wrappedHandler = this.handlerMap.get(key);
+
+      if (wrappedHandler) {
+        // 래퍼 핸들러로 제거
+        this.socket.off(event, wrappedHandler);
+        this.handlerMap.delete(key);
+      } else {
+        // Map에 없으면 원본 핸들러로 시도 (하위 호환성)
+        this.socket.off(event, handler);
+      }
     } else {
       // 핸들러가 없으면 해당 이벤트의 모든 리스너 제거
       this.socket.off(event);
+
+      // Map에서도 해당 이벤트의 모든 핸들러 제거
+      for (const key of this.handlerMap.keys()) {
+        if (key.startsWith(`${event}:`)) {
+          this.handlerMap.delete(key);
+        }
+      }
     }
   }
 

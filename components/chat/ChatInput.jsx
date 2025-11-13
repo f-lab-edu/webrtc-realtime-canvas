@@ -10,10 +10,8 @@ import * as input from "@/components/ui/input";
  *
  * @param {Object} props
  * @param {Function} props.onSendMessage - 메시지 전송 함수
- * @param {Function} props.onStartTyping - 타이핑 시작 함수 (선택적)
- * @param {Function} props.onStopTyping - 타이핑 중지 함수 (선택적)
  */
-export default function ChatInput({ onSendMessage, onStartTyping, onStopTyping }) {
+export default function ChatInput({ onSendMessage }) {
   const [message, setMessage] = useState("");
 
   /**
@@ -31,11 +29,6 @@ export default function ChatInput({ onSendMessage, onStartTyping, onStopTyping }
 
     // 입력 필드 초기화
     setMessage("");
-
-    // 타이핑 중지 (선택적)
-    if (onStopTyping) {
-      onStopTyping();
-    }
   };
 
   /**
@@ -53,11 +46,6 @@ export default function ChatInput({ onSendMessage, onStartTyping, onStopTyping }
    */
   const handleChange = (e) => {
     setMessage(e.target.value);
-
-    // 타이핑 시작 (선택적)
-    if (onStartTyping && e.target.value.length > 0) {
-      onStartTyping();
-    }
   };
 
   return (

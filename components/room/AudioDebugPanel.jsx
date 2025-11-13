@@ -52,17 +52,31 @@ export default function AudioDebugPanel({ localStream, remoteStream }) {
   }, [localStream, remoteStream]);
 
   return (
-    <div className="fixed bottom-20 left-4 bg-black/80 text-white p-4 rounded-lg text-xs max-w-md z-50">
-      <h3 className="font-bold mb-2">🔊 오디오 디버그 정보</h3>
+    <div
+      className="
+      top-4
+      right-4
+      bg-gray-900
+      border
+      border-gray-700
+      text-white
+      p-4
+      rounded-lg
+      text-xs
+      max-w-md
+      shadow-xl
+      z-[60]"
+    >
+      <h3 className="font-bold mb-3 text-sm">🔊 오디오 디버그 정보</h3>
 
       {/* 로컬 오디오 */}
-      <div className="mb-3">
-        <div className="font-semibold text-green-400">로컬 오디오:</div>
+      <div className="mb-3 p-3 bg-gray-800 rounded border border-gray-700">
+        <div className="font-semibold text-green-400 mb-2">로컬 오디오:</div>
         {localAudioInfo ? (
           <div className="ml-2">
             <div>트랙 수: {localAudioInfo.trackCount}</div>
             {localAudioInfo.tracks.map((track, _) => (
-              <div key={track.label} className="ml-2 text-gray-300">
+              <div key={track.label} className="ml-2 text-gray-300 mt-1">
                 <div>• {track.label || "Unknown"}</div>
                 <div className="ml-4">
                   <span className={track.enabled ? "text-green-400" : "text-red-400"}>
@@ -84,13 +98,13 @@ export default function AudioDebugPanel({ localStream, remoteStream }) {
       </div>
 
       {/* 원격 오디오 */}
-      <div>
-        <div className="font-semibold text-blue-400">원격 오디오:</div>
+      <div className="p-3 bg-gray-800 rounded border border-gray-700">
+        <div className="font-semibold text-blue-400 mb-2">원격 오디오:</div>
         {remoteAudioInfo ? (
           <div className="ml-2">
             <div>트랙 수: {remoteAudioInfo.trackCount}</div>
             {remoteAudioInfo.tracks.map((track, _) => (
-              <div key={track.label} className="ml-2 text-gray-300">
+              <div key={track.label} className="ml-2 text-gray-300 mt-1">
                 <div>• {track.label || "Unknown"}</div>
                 <div className="ml-4">
                   <span className={track.enabled ? "text-green-400" : "text-red-400"}>
@@ -111,7 +125,7 @@ export default function AudioDebugPanel({ localStream, remoteStream }) {
         )}
       </div>
 
-      <div className="mt-3 pt-3 border-t border-gray-600 text-gray-400">
+      <div className="mt-3 pt-3 border-t border-gray-700 text-gray-400">
         💡 원격 오디오 트랙이 없거나 비활성화되어 있으면 소리가 들리지 않습니다.
       </div>
     </div>

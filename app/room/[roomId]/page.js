@@ -1,22 +1,30 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
+import DeviceSelector from "@/components/room/DeviceSelector";
+import NicknameInput from "@/components/room/NicknameInput";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import { WhiteboardProvider } from "@/contexts/WhiteboardContext";
 import useChat from "@/hooks/useChat";
 import useWebRTC from "@/hooks/useWebRTC";
+import { saveNicknameToSession } from "@/lib/nicknameUtils";
 
 /**
  * 방 페이지 컴포넌트
- * 동적 라우팅으로 roomId를 받아 방에 참가하고 미디어를 초기화
+ *
+ * 방 입장 플로우:
+ * 1. 닉네임 입력 (하이브리드 방식: 세션 스토리지에서 기본 닉네임 로드)
+ * 2. 디바이스 선택 (Phase 19-3)
+ * 3. 방 참가
  */
 export default function RoomPage() {
   const params = useParams();
@@ -24,20 +32,35 @@ export default function RoomPage() {
   const router = useRouter();
 
   // Context 및 Hooks
-  const { joinRoom, isConnected, showChat, toggleChat } = useRoomContext();
-  const { localStream, remoteStream, initializeMedia, isVideoEnabled } = useMediaContext();
+  const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
+  const {
+    localStream,
+    remoteStream,
+    isVideoEnabled,
+    getAvailableDevices,
+    initializeMediaWithDevice,
+  } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
-  const {
-    messages,
-    unreadCount,
-    sendMessage,
-    clearUnreadCount,
-    isTyping,
-    startTyping,
-    stopTyping,
-  } = useChat();
+  const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
+
+  // 닉네임 설정 완료 상태
+  const [isNicknameSet, setIsNicknameSet] = useState(false);
+
+  // remoteStream 디버깅
+  useEffect(() => {
+    console.log("[RoomPage] remoteStream 상태 변경:", {
+      hasRemoteStream: !!remoteStream,
+      streamId: remoteStream?.id,
+      active: remoteStream?.active,
+      videoTracks: remoteStream?.getVideoTracks().length,
+      audioTracks: remoteStream?.getAudioTracks().length,
+    });
+  }, [remoteStream]);
+
+  // Phase 19-3: 디바이스 선택 완료 상태
+  const [isDeviceSelected, setIsDeviceSelected] = useState(false);
 
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
@@ -45,43 +68,56 @@ export default function RoomPage() {
   // URL 복사 성공 상태
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // 초기화 상태 (ref로 관리하여 중복 실행 방지)
-  const isInitializedRef = useRef(false);
+  /**
+   * 닉네임 설정 완료 핸들러
+   * 닉네임 설정 후 디바이스 선택 단계로 진행
+   */
+  const handleNicknameSet = (nickname) => {
+    console.log("[RoomPage] 닉네임 설정 완료:", nickname);
+    setNickname(nickname); // RoomContext에 닉네임 설정
+    setIsNicknameSet(true);
+
+    // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
+    saveNicknameToSession(nickname);
+  };
 
   /**
-   * 컴포넌트 마운트 시 방 참가 및 미디어 초기화
+   * Phase 19-3: 디바이스 선택 완료 후 방 입장
    */
+  const handleDeviceSelected = async () => {
+    try {
+      console.log("[RoomPage Phase 19-3] 디바이스 선택 완료, 방 입장 시작");
+      setIsDeviceSelected(true);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: roomId only
-  useEffect(() => {
-    // 이미 초기화되었으면 무시
-    if (isInitializedRef.current) {
-      console.log("이미 초기화되었습니다. 중복 실행 방지");
-      return;
+      // 방 참가
+      await joinRoom(roomId);
+      console.log("[RoomPage Phase 19-3] 방 참가 완료");
+    } catch (error) {
+      console.error("[RoomPage Phase 19-3] 방 참가 실패:", error);
+      alert("방 참가에 실패했습니다. 다시 시도해주세요.");
+      setIsDeviceSelected(false);
     }
+  };
 
-    const initialize = async () => {
-      try {
-        console.log("방 페이지 초기화 시작:", roomId);
-        isInitializedRef.current = true;
+  /**
+   * 닉네임 입력 화면 표시 (첫 번째 단계)
+   */
+  if (!isNicknameSet) {
+    return <NicknameInput onNicknameSet={handleNicknameSet} roomId={roomId} />;
+  }
 
-        // 1. 미디어 스트림 초기화 (웹캠 + 마이크)
-        await initializeMedia();
-        console.log("미디어 초기화 완료");
-
-        // 2. 방 참가
-        await joinRoom(roomId);
-        console.log("방 참가 완료");
-      } catch (error) {
-        console.error("방 초기화 에러:", error);
-        isInitializedRef.current = false; // 에러 발생 시 재시도 가능하도록
-        alert("방 참가에 실패했습니다. 미디어 권한을 확인해주세요.");
-      }
-    };
-
-    initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]); // roomId가 변경될 때만 실행
+  /**
+   * Phase 19-3: 디바이스 선택 화면 표시 (두 번째 단계)
+   */
+  if (!isDeviceSelected) {
+    return (
+      <DeviceSelector
+        onDeviceSelected={handleDeviceSelected}
+        getAvailableDevices={getAvailableDevices}
+        initializeMediaWithDevice={initializeMediaWithDevice}
+      />
+    );
+  }
 
   /**
    * 방 URL 복사 핸들러
@@ -105,24 +141,23 @@ export default function RoomPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-950">
       {/* 상단 헤더 */}
-      <header className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-800">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-white">방: {roomId}</h1>
+      <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold text-white">방: {roomId}</h1>
           {isConnected && <span className="text-sm text-green-400">● 연결됨</span>}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             onClick={() => router.push("/")}
             variant="outline"
             size="sm"
-            className="text-white"
+            className="text-white h-8"
             title="홈으로"
           >
             🏠 홈
           </Button>
-
-          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white">
+          <Button onClick={copyRoomUrl} variant="outline" size="sm" className="text-white h-8">
             {copySuccess ? "✅ 복사됨" : "🔗 링크 복사"}
           </Button>
 
@@ -130,7 +165,7 @@ export default function RoomPage() {
             onClick={toggleChat}
             variant="outline"
             size="sm"
-            className="text-white relative"
+            className="text-white relative h-8"
             title={showChat ? "채팅 숨기기" : "채팅 보기"}
           >
             {showChat ? "💬" : "◀"}
@@ -141,13 +176,24 @@ export default function RoomPage() {
               </span>
             )}
           </Button>
+
+          {/* 오디오 디버그 토글 버튼 */}
+          <Button
+            onClick={() => setShowDebug(!showDebug)}
+            variant="outline"
+            size="sm"
+            className="text-white h-8"
+            title={showDebug ? "디버그 숨기기" : "디버그 보기"}
+          >
+            {showDebug ? "🔇" : "🔊"}
+          </Button>
         </div>
       </header>
 
       {/* 메인 컨텐츠: 3컬럼 레이아웃 (3:5:2 비율) */}
-      <div className="flex-1 flex flex-row min-h-0">
+      <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
         {/* 왼쪽: 비디오 스택 (30%) */}
-        <aside className="flex-[3] h-full bg-gray-950 border-r border-gray-800">
+        <aside className="flex-[3] flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
           <VideoStack
             localStream={localStream}
             remoteStream={remoteStream}
@@ -156,24 +202,23 @@ export default function RoomPage() {
         </aside>
 
         {/* 중앙: 화이트보드 (50%) */}
-        <main className="flex-[5] flex flex-col min-h-0">
-          <WhiteboardToolbar />
-          <div className="flex-1 min-h-0">
-            <WhiteboardCanvas />
-          </div>
+        <main className="flex-[5] flex flex-col min-h-0 overflow-hidden">
+          <WhiteboardProvider>
+            <WhiteboardToolbar />
+            <div className="flex-1 min-h-0">
+              <WhiteboardCanvas />
+            </div>
+          </WhiteboardProvider>
         </main>
 
         {/* 오른쪽: 채팅 영역 (20%) */}
         {showChat && (
-          <aside className="flex-[2] bg-gray-900 border-l border-gray-800 transition-all duration-300">
+          <aside className="flex-[2] flex flex-col bg-gray-900 border-l border-gray-800 transition-all duration-300 overflow-hidden">
             <ChatPanel
               messages={messages}
               unreadCount={unreadCount}
               onSendMessage={sendMessage}
               onClearUnread={clearUnreadCount}
-              isTyping={isTyping}
-              onStartTyping={startTyping}
-              onStopTyping={stopTyping}
             />
           </aside>
         )}
@@ -184,15 +229,6 @@ export default function RoomPage() {
 
       {/* 오디오 디버그 패널 (개발 중에만 표시) */}
       {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}
-
-      {/* 디버그 패널 토글 버튼 */}
-      <button
-        type="button"
-        onClick={() => setShowDebug(!showDebug)}
-        className="fixed bottom-4 left-4 bg-gray-800 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-700 z-50"
-      >
-        {showDebug ? "🔇 디버그 숨기기" : "🔊 디버그 보기"}
-      </button>
     </div>
   );
 }

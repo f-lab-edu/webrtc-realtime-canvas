@@ -40,13 +40,14 @@ class WhiteboardService {
         ...options,
       });
 
-      // 그리기 모드 활성화 (생성 후 설정)
-      this.canvas.isDrawingMode = true;
-
       // 그리기 브러시 생성 및 설정 (Fabric.js v6)
-      this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
-      this.canvas.freeDrawingBrush.width = 2;
-      this.canvas.freeDrawingBrush.color = "#000000";
+      const brush = new fabric.PencilBrush(this.canvas);
+      brush.color = "#000000";
+      brush.width = 2;
+
+      // 브러시 설정 후 그리기 모드 활성화
+      this.canvas.freeDrawingBrush = brush;
+      this.canvas.isDrawingMode = true;
 
       console.log("화이트보드 캔버스 초기화 완료", {
         isDrawingMode: this.canvas.isDrawingMode,
@@ -79,12 +80,26 @@ class WhiteboardService {
       if (this.isApplyingRemoteEvent) return;
 
       const path = event.path;
+      const pathData = path.toJSON();
+
+      console.log(
+        "그리기 이벤트 발생:",
+        "path:created",
+        "색상:",
+        pathData.stroke,
+        "두께:",
+        pathData.strokeWidth,
+        "브러시 색상:",
+        this.canvas.freeDrawingBrush?.color,
+        "브러시 두께:",
+        this.canvas.freeDrawingBrush?.width
+      );
+
+      // path 데이터 그대로 전송 (이미 브러시 설정이 적용되어 있음)
       const eventData = {
         type: "path:created",
-        data: path.toJSON(),
+        data: pathData,
       };
-
-      console.log("그리기 이벤트 발생:", eventData.type);
 
       if (this.drawEventHandler) {
         this.drawEventHandler(eventData);
@@ -188,16 +203,65 @@ class WhiteboardService {
 
       switch (type) {
         case "path:created":
-        case "object:added":
+        case "object:added": {
           // JSON 데이터로부터 Fabric 객체 생성
-          fabric.util.enlivenObjects([data], (objects) => {
-            objects.forEach((obj) => {
-              this.canvas.add(obj);
-            });
-            this.canvas.renderAll();
-            this.isApplyingRemoteEvent = false;
-          });
+          console.log(
+            "원격 객체 생성 중:",
+            type,
+            "데이터:",
+            JSON.stringify(data).substring(0, 200)
+          );
+
+          // Fabric.js v6: enlivenObjects는 Promise를 반환할 수 있음
+          const enlivenResult = fabric.util.enlivenObjects(
+            [data],
+            (objects) => {
+              console.log("enlivenObjects 콜백 실행, 객체 수:", objects.length);
+              objects.forEach((obj) => {
+                console.log(
+                  "원격 객체 추가:",
+                  obj.type,
+                  "색상:",
+                  obj.stroke,
+                  "두께:",
+                  obj.strokeWidth
+                );
+                this.canvas.add(obj);
+              });
+              this.canvas.renderAll();
+              console.log("캔버스 렌더링 완료, 총 객체 수:", this.canvas.getObjects().length);
+              this.isApplyingRemoteEvent = false;
+            },
+            "" // namespace
+          );
+
+          // Promise인 경우 처리
+          if (enlivenResult && typeof enlivenResult.then === "function") {
+            enlivenResult
+              .then((objects) => {
+                console.log("enlivenObjects Promise 완료, 객체 수:", objects.length);
+                objects.forEach((obj) => {
+                  console.log(
+                    "원격 객체 추가 (Promise):",
+                    obj.type,
+                    "색상:",
+                    obj.stroke,
+                    "두께:",
+                    obj.strokeWidth
+                  );
+                  this.canvas.add(obj);
+                });
+                this.canvas.renderAll();
+                console.log("캔버스 렌더링 완료, 총 객체 수:", this.canvas.getObjects().length);
+                this.isApplyingRemoteEvent = false;
+              })
+              .catch((error) => {
+                console.error("enlivenObjects 에러:", error);
+                this.isApplyingRemoteEvent = false;
+              });
+          }
           break;
+        }
 
         case "object:modified": {
           // 기존 객체 찾아서 수정
@@ -230,7 +294,7 @@ class WhiteboardService {
           break;
 
         default:
-          console.warn("알 수 없는 이벤트 타입:", type);
+          console.log("알 수 없는 이벤트 타입:", type);
           this.isApplyingRemoteEvent = false;
       }
 
@@ -281,11 +345,19 @@ class WhiteboardService {
     }
 
     if (!this.canvas.freeDrawingBrush) {
+      console.warn("브러시가 초기화되지 않았습니다. 새로 생성합니다.");
       this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
     }
 
     this.canvas.freeDrawingBrush.color = color;
-    console.log("브러시 색상 변경:", color);
+    console.log(
+      "브러시 색상 변경 완료:",
+      color,
+      "적용 확인:",
+      this.canvas.freeDrawingBrush.color,
+      "브러시 타입:",
+      this.canvas.freeDrawingBrush.constructor.name
+    );
   }
 
   /**
@@ -299,11 +371,19 @@ class WhiteboardService {
     }
 
     if (!this.canvas.freeDrawingBrush) {
+      console.warn("브러시가 초기화되지 않았습니다. 새로 생성합니다.");
       this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
     }
 
     this.canvas.freeDrawingBrush.width = width;
-    console.log("브러시 두께 변경:", width);
+    console.log(
+      "브러시 두께 변경 완료:",
+      width,
+      "적용 확인:",
+      this.canvas.freeDrawingBrush.width,
+      "브러시 타입:",
+      this.canvas.freeDrawingBrush.constructor.name
+    );
   }
 
   /**

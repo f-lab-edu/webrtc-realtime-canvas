@@ -41,6 +41,11 @@ app.get("/health", (_req, res) => {
 io.on("connection", (socket) => {
   console.log(`클라이언트 연결됨: ${socket.id}`);
 
+  // Socket 에러 핸들링
+  socket.on("error", (error) => {
+    console.error(`[Socket ${socket.id}] 에러 발생:`, error);
+  });
+
   // Socket 이벤트 핸들러 등록
   registerSocketHandlers(io, socket, roomManager);
 
@@ -49,7 +54,7 @@ io.on("connection", (socket) => {
 });
 
 // 서버 시작
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 httpServer.listen(PORT, () => {
   console.log(`Signaling server running on port ${PORT}`);

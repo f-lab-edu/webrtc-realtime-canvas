@@ -305,6 +305,118 @@ describe("RoomManager", () => {
     });
   });
 
+  describe("닉네임 관리", () => {
+    it("참가자 닉네임을 설정할 수 있다", () => {
+      // Given: 방에 참가한 참가자
+      const roomId = "room-1";
+      const socketId = "socket-1";
+      const nickname = "홍길동";
+      roomManager.addParticipant(roomId, socketId);
+
+      // When: 닉네임 설정
+      roomManager.setParticipantNickname(roomId, socketId, nickname);
+
+      // Then: 닉네임이 저장됨
+      const storedNickname = roomManager.getParticipantNickname(socketId);
+      expect(storedNickname).toBe(nickname);
+    });
+
+    it("참가자 닉네임을 조회할 수 있다", () => {
+      // Given: 닉네임이 설정된 참가자
+      const roomId = "room-1";
+      const socketId = "socket-1";
+      const nickname = "홍길동";
+      roomManager.addParticipant(roomId, socketId);
+      roomManager.setParticipantNickname(roomId, socketId, nickname);
+
+      // When: 닉네임 조회
+      const result = roomManager.getParticipantNickname(socketId);
+
+      // Then: 올바른 닉네임 반환
+      expect(result).toBe(nickname);
+    });
+
+    it("닉네임이 설정되지 않은 참가자는 null을 반환한다", () => {
+      // Given: 닉네임이 설정되지 않은 참가자
+      const roomId = "room-1";
+      const socketId = "socket-1";
+      roomManager.addParticipant(roomId, socketId);
+
+      // When: 닉네임 조회
+      const result = roomManager.getParticipantNickname(socketId);
+
+      // Then: null 반환
+      expect(result).toBeNull();
+    });
+
+    it("존재하지 않는 참가자의 닉네임 조회 시 null을 반환한다", () => {
+      // Given: 존재하지 않는 참가자
+
+      // When: 닉네임 조회
+      const result = roomManager.getParticipantNickname("non-existent");
+
+      // Then: null 반환
+      expect(result).toBeNull();
+    });
+
+    it("방의 모든 참가자 닉네임을 조회할 수 있다", () => {
+      // Given: 여러 참가자가 있는 방
+      const roomId = "room-1";
+      roomManager.addParticipant(roomId, "socket-1");
+      roomManager.addParticipant(roomId, "socket-2");
+      roomManager.setParticipantNickname(roomId, "socket-1", "홍길동");
+      roomManager.setParticipantNickname(roomId, "socket-2", "김철수");
+
+      // When: 모든 참가자 닉네임 조회
+      const nicknames = roomManager.getAllParticipantNicknames(roomId);
+
+      // Then: 모든 닉네임이 반환됨
+      expect(nicknames.size).toBe(2);
+      expect(nicknames.get("socket-1")).toBe("홍길동");
+      expect(nicknames.get("socket-2")).toBe("김철수");
+    });
+
+    it("참가자 제거 시 닉네임도 함께 삭제된다", () => {
+      // Given: 닉네임이 설정된 참가자
+      const roomId = "room-1";
+      const socketId = "socket-1";
+      roomManager.addParticipant(roomId, socketId);
+      roomManager.setParticipantNickname(roomId, socketId, "홍길동");
+      expect(roomManager.getParticipantNickname(socketId)).toBe("홍길동");
+
+      // When: 참가자 제거
+      roomManager.removeParticipant(roomId, socketId);
+
+      // Then: 닉네임도 삭제됨
+      expect(roomManager.getParticipantNickname(socketId)).toBeNull();
+    });
+
+    it("닉네임을 업데이트할 수 있다", () => {
+      // Given: 닉네임이 설정된 참가자
+      const roomId = "room-1";
+      const socketId = "socket-1";
+      roomManager.addParticipant(roomId, socketId);
+      roomManager.setParticipantNickname(roomId, socketId, "홍길동");
+      expect(roomManager.getParticipantNickname(socketId)).toBe("홍길동");
+
+      // When: 닉네임 업데이트
+      roomManager.setParticipantNickname(roomId, socketId, "김철수");
+
+      // Then: 새 닉네임이 저장됨
+      expect(roomManager.getParticipantNickname(socketId)).toBe("김철수");
+    });
+
+    it("존재하지 않는 방에 닉네임을 설정하면 아무 일도 일어나지 않는다", () => {
+      // Given: 존재하지 않는 방
+
+      // When: 닉네임 설정 시도
+      roomManager.setParticipantNickname("non-existent", "socket-1", "홍길동");
+
+      // Then: 에러 없이 처리됨 (로그만 출력)
+      expect(roomManager.getParticipantNickname("socket-1")).toBeNull();
+    });
+  });
+
   describe("리소스 정리", () => {
     it("cleanup 메서드가 모든 리소스를 정리한다", () => {
       // Given: 방과 참가자가 있는 상태

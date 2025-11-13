@@ -8,12 +8,12 @@
  * - senderName: 향후 다자간 통화 확장 시 발신자 표시
  */
 class ChatService {
-  constructor(socketId, userName) {
+  constructor(socketId, nickname) {
     this.messages = [];
     this.unreadCount = 0;
     this.currentUser = {
       id: socketId,
-      name: userName || `User_${Math.random().toString(36).substr(2, 4)}`,
+      name: nickname || `user${socketId?.slice(0, 4) || Math.random().toString(36).slice(2, 6)}`,
     };
     this.messageReceivedHandler = null;
   }
@@ -21,12 +21,12 @@ class ChatService {
   /**
    * 현재 사용자 정보 업데이트
    * @param {string} socketId - Socket ID
-   * @param {string} userName - 사용자 이름 (선택적)
+   * @param {string} nickname - 사용자 닉네임 (선택적)
    */
-  updateCurrentUser(socketId, userName) {
+  updateCurrentUser(socketId, nickname) {
     this.currentUser = {
       id: socketId,
-      name: userName || this.currentUser.name,
+      name: nickname || this.currentUser.name,
     };
     console.log("현재 사용자 정보 업데이트:", this.currentUser);
   }
@@ -38,7 +38,7 @@ class ChatService {
    */
   sendMessage(content) {
     if (!content || content.trim() === "") {
-      console.warn("빈 메시지는 전송할 수 없습니다.");
+      console.log("빈 메시지는 전송할 수 없습니다.");
       return null;
     }
 
@@ -66,7 +66,7 @@ class ChatService {
    */
   addMessage(message) {
     if (!message) {
-      console.warn("유효하지 않은 메시지입니다.");
+      console.log("유효하지 않은 메시지입니다.");
       return;
     }
 
@@ -149,7 +149,7 @@ class ChatService {
    * @returns {string}
    */
   _generateMessageId() {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
   /**

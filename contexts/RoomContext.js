@@ -20,6 +20,8 @@ export function RoomProvider({ children }) {
   const [connectionState, setConnectionState] = useState("disconnected"); // 'connecting' | 'connected' | 'disconnected'
   const [isConnected, setIsConnected] = useState(false);
   const [showChat, setShowChat] = useState(true); // 채팅 영역 표시 여부
+  const [nickname, setNicknameState] = useState(null); // 현재 사용자 닉네임
+  const [participantNicknames, setParticipantNicknames] = useState(new Map()); // socketId -> nickname 매핑
 
   // SocketService 인스턴스 (ref로 관리하여 재생성 방지)
   const socketServiceRef = useRef(null);
@@ -45,13 +47,20 @@ export function RoomProvider({ children }) {
    * @param {SocketService} socketService
    * @param {string} targetRoomId
    */
-  const setupSocketListeners = useCallback((socketService, targetRoomId) => {
+  const setupSocketListeners = useCallback((socketService, targetRoomId, currentNickname) => {
     // 방 참가 성공
     socketService.on("room:joined", (data) => {
       console.log("방 참가 성공:", data);
       setConnectionState("connected");
       setIsConnected(true);
       setParticipants(data.participants || []);
+
+      // 참가자 닉네임 맵 수신 및 저장
+      if (data.participantNicknames) {
+        console.log("참가자 닉네임 맵 수신:", data.participantNicknames);
+        const nicknamesMap = new Map(Object.entries(data.participantNicknames));
+        setParticipantNicknames(nicknamesMap);
+      }
     });
 
     // 방 정원 초과
@@ -63,20 +72,52 @@ export function RoomProvider({ children }) {
     });
 
     // 새 참가자 입장
-    socketService.on("room:participant-joined", (socketId) => {
-      console.log("새 참가자 입장:", socketId);
+    socketService.on("room:participant-joined", (data) => {
+      const socketId = typeof data === "string" ? data : data.socketId;
+      const participantNickname = typeof data === "object" ? data.nickname : null;
+
+      console.log("새 참가자 입장:", socketId, "닉네임:", participantNickname);
+
       setParticipants((prev) => {
         if (!prev.includes(socketId)) {
           return [...prev, socketId];
         }
         return prev;
       });
+
+      // 새 참가자 닉네임 저장
+      if (participantNickname) {
+        setParticipantNicknames((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(socketId, participantNickname);
+          return newMap;
+        });
+      }
     });
 
     // 참가자 퇴장
     socketService.on("room:participant-left", (socketId) => {
       console.log("참가자 퇴장:", socketId);
       setParticipants((prev) => prev.filter((id) => id !== socketId));
+
+      // 퇴장한 참가자 닉네임 제거
+      setParticipantNicknames((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(socketId);
+        return newMap;
+      });
+    });
+
+    // 닉네임 업데이트 이벤트 리스너
+    socketService.on("user:nickname-updated", (data) => {
+      console.log("닉네임 업데이트 수신:", data);
+      if (data.socketId && data.nickname) {
+        setParticipantNicknames((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(data.socketId, data.nickname);
+          return newMap;
+        });
+      }
     });
 
     // Socket 연결 해제
@@ -91,9 +132,12 @@ export function RoomProvider({ children }) {
       console.log("Socket 재연결 성공, 방 재참가 시도");
       setConnectionState("connecting");
 
-      // 방 재참가
+      // 방 재참가 (닉네임 포함)
       if (targetRoomId) {
-        socketService.emit("room:join", targetRoomId);
+        socketService.emit("room:join", {
+          roomId: targetRoomId,
+          nickname: currentNickname || null,
+        });
       }
     });
   }, []);
@@ -123,10 +167,14 @@ export function RoomProvider({ children }) {
         await socketService.connect(serverUrl);
 
         // Socket 이벤트 리스너 등록
-        setupSocketListeners(socketService, targetRoomId);
+        setupSocketListeners(socketService, targetRoomId, nickname);
 
-        // 방 참가 요청
-        socketService.emit("room:join", targetRoomId);
+        // 방 참가 요청 (닉네임 포함)
+        socketService.emit("room:join", {
+          roomId: targetRoomId,
+          nickname: nickname || null,
+        });
+        console.log("방 참가 요청 전송, 닉네임:", nickname || "없음");
 
         setRoomId(targetRoomId);
       } catch (error) {
@@ -135,7 +183,7 @@ export function RoomProvider({ children }) {
         throw error;
       }
     },
-    [setupSocketListeners, roomId]
+    [setupSocketListeners, roomId, nickname]
   );
 
   /**
@@ -170,6 +218,35 @@ export function RoomProvider({ children }) {
     setShowChat((prev) => !prev);
   }, []);
 
+  /**
+   * 닉네임 설정
+   * @param {string} newNickname - 설정할 닉네임
+   */
+  const setNickname = useCallback((newNickname) => {
+    console.log("닉네임 설정:", newNickname);
+    setNicknameState(newNickname);
+
+    // SocketService에도 닉네임 설정
+    const socketService = socketServiceRef.current;
+    if (socketService) {
+      socketService.setNickname(newNickname);
+    }
+  }, []);
+
+  /**
+   * 참가자 닉네임 업데이트
+   * @param {string} socketId - 참가자 Socket ID
+   * @param {string} participantNickname - 참가자 닉네임
+   */
+  const updateParticipantNickname = useCallback((socketId, participantNickname) => {
+    console.log(`참가자 닉네임 업데이트: ${socketId} -> ${participantNickname}`);
+    setParticipantNicknames((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(socketId, participantNickname);
+      return newMap;
+    });
+  }, []);
+
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     // 페이지 새로고침 또는 닫기 시 정리
@@ -202,11 +279,15 @@ export function RoomProvider({ children }) {
     connectionState,
     isConnected,
     showChat,
+    nickname,
+    participantNicknames,
     socketService: socketServiceRef.current,
     createRoom,
     joinRoom,
     leaveRoom,
     toggleChat,
+    setNickname,
+    updateParticipantNickname,
   };
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

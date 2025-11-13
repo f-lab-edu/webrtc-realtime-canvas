@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import useWhiteboard from "@/hooks/useWhiteboard";
+import { useWhiteboard } from "@/contexts/WhiteboardContext";
 
 /**
  * WhiteboardCanvas 컴포넌트
@@ -50,8 +50,7 @@ export default function WhiteboardCanvas() {
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 빈 배열로 한 번만 실행
+  }, [initializeWhiteboard, setCanvasSize]); // 의존성 배열에 함수 추가
 
   return (
     <div ref={containerRef} className="w-full h-full bg-white">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRoomContext } from "@/contexts/RoomContext";
+import logger from "@/lib/logger";
 import ChatService from "@/services/ChatService";
 
 /**
@@ -14,7 +15,7 @@ import ChatService from "@/services/ChatService";
  */
 function useChat() {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, isConnected } = useRoomContext();
+  const { socketService, roomId, isConnected, nickname } = useRoomContext();
 
   // ChatService 인스턴스 (ref로 관리)
   const chatServiceRef = useRef(null);
@@ -23,32 +24,32 @@ function useChat() {
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [currentUser, setCurrentUser] = useState(null);
-  const [isTyping, setIsTyping] = useState(false); // 상대방 타이핑 상태 (선택적)
-
-  // 타이핑 타이머 ref (선택적)
-  const typingTimerRef = useRef(null);
 
   /**
-   * ChatService 초기화
+   * ChatService 초기화 및 Socket 이벤트 리스너 설정
    */
   useEffect(() => {
     if (!socketService || !isConnected) {
+      logger.warn("CHAT", "초기화 대기 중", {
+        hasSocketService: !!socketService,
+        isConnected,
+      });
       return;
     }
 
     const socketId = socketService.getSocketId();
     if (!socketId) {
-      console.warn("Socket ID가 없습니다.");
+      console.log("Socket ID가 없습니다.");
       return;
     }
 
     // ChatService 인스턴스 생성 또는 업데이트
     if (!chatServiceRef.current) {
-      chatServiceRef.current = new ChatService(socketId);
-      console.log("ChatService 초기화 완료");
+      chatServiceRef.current = new ChatService(socketId, nickname);
+      console.log("ChatService 초기화 완료, 닉네임:", nickname);
     } else {
-      // Socket ID 업데이트 (재연결 시)
-      chatServiceRef.current.updateCurrentUser(socketId);
+      // Socket ID 및 닉네임 업데이트 (재연결 시)
+      chatServiceRef.current.updateCurrentUser(socketId, nickname);
     }
 
     // 현재 사용자 정보 업데이트
@@ -59,7 +60,78 @@ function useChat() {
       console.log("새 메시지 수신:", message);
       // 메시지 상태 업데이트는 addMessage에서 처리됨
     });
-  }, [socketService, isConnected]);
+
+    logger.info("CHAT", "ChatService 초기화 완료, Socket 이벤트 리스너 등록 시작", {
+      socketId,
+      isConnected: socketService.isSocketConnected(),
+    });
+    console.log("[useChat] ChatService 초기화 완료, Socket 이벤트 리스너 등록 시작:", {
+      socketId,
+      isConnected: socketService.isSocketConnected(),
+    });
+
+    // 원격 메시지 수신
+    const handleChatMessage = (data) => {
+      logger.info("CHAT", "원격 메시지 수신", data);
+
+      const { from, message } = data;
+      console.log("원격 메시지 수신 from:", from);
+
+      // 원격 메시지 생성 (isLocal: false)
+      const remoteMessage = {
+        ...message,
+        senderId: from,
+        isLocal: false,
+      };
+
+      logger.debug("CHAT", "원격 메시지 처리", remoteMessage);
+
+      // ChatService에 메시지 추가
+      chatServiceRef.current.addMessage(remoteMessage);
+
+      // UI 업데이트
+      setMessages((prevMessages) => [...prevMessages, remoteMessage]);
+      setUnreadCount((prevCount) => prevCount + 1);
+    };
+
+    // 채팅 에러 수신
+    const handleChatError = (error) => {
+      logger.error("CHAT", "서버에서 채팅 에러 수신", error);
+      console.error("채팅 에러:", error);
+      alert(`채팅 에러: ${error.message}`);
+    };
+
+    // 이벤트 리스너 등록
+    socketService.on("chat:message", handleChatMessage);
+    socketService.on("chat:error", handleChatError);
+
+    logger.info("CHAT", "Socket 이벤트 리스너 등록 완료", {
+      events: ["chat:message", "chat:error"],
+    });
+    console.log("[useChat] Socket 이벤트 리스너 등록 완료:", ["chat:message", "chat:error"]);
+
+    // 클린업 함수
+    return () => {
+      logger.info("CHAT", "Socket 이벤트 리스너 제거");
+      console.log("[useChat] Socket 이벤트 리스너 제거");
+      socketService.off("chat:message", handleChatMessage);
+      socketService.off("chat:error", handleChatError);
+    };
+  }, [socketService, isConnected, nickname]);
+
+  /**
+   * 닉네임 변경 시 ChatService 업데이트
+   */
+  useEffect(() => {
+    if (chatServiceRef.current && socketService && nickname) {
+      const socketId = socketService.getSocketId();
+      if (socketId) {
+        chatServiceRef.current.updateCurrentUser(socketId, nickname);
+        setCurrentUser(chatServiceRef.current.getCurrentUser());
+        console.log("닉네임 변경으로 ChatService 업데이트:", nickname);
+      }
+    }
+  }, [nickname, socketService]);
 
   /**
    * 메시지 전송
@@ -67,13 +139,26 @@ function useChat() {
    */
   const sendMessage = useCallback(
     (content) => {
+      logger.debug("CHAT", "sendMessage 호출됨", {
+        content,
+        roomId,
+        hasSocketService: !!socketService,
+      });
+
       if (!chatServiceRef.current || !socketService || !roomId) {
-        console.error("채팅 서비스가 초기화되지 않았거나 연결되지 않았습니다.");
+        const errorMsg = "채팅 서비스가 초기화되지 않았거나 연결되지 않았습니다.";
+        logger.error("CHAT", errorMsg, {
+          hasChatService: !!chatServiceRef.current,
+          hasSocketService: !!socketService,
+          roomId,
+        });
+        console.error(errorMsg);
         return;
       }
 
       if (!content || content.trim() === "") {
-        console.warn("빈 메시지는 전송할 수 없습니다.");
+        logger.warn("CHAT", "빈 메시지 전송 시도");
+        console.log("빈 메시지는 전송할 수 없습니다.");
         return;
       }
 
@@ -82,14 +167,17 @@ function useChat() {
         const localMessage = chatServiceRef.current.sendMessage(content);
 
         if (!localMessage) {
+          logger.error("CHAT", "로컬 메시지 생성 실패");
           return;
         }
+
+        logger.info("CHAT", "로컬 메시지 생성 완료", localMessage);
 
         // 즉시 UI에 표시 (optimistic update)
         setMessages((prevMessages) => [...prevMessages, localMessage]);
 
-        // 서버로 메시지 전송
-        socketService.emit("chat:message", {
+        // 서버로 전송할 데이터
+        const payload = {
           roomId,
           message: {
             id: localMessage.id,
@@ -98,10 +186,20 @@ function useChat() {
             content: localMessage.content,
             timestamp: localMessage.timestamp,
           },
-        });
+        };
 
+        logger.info("CHAT", "서버로 메시지 전송 시도", payload);
+
+        // 서버로 메시지 전송
+        socketService.emit("chat:message", payload);
+
+        logger.info("CHAT", "메시지 전송 완료", { messageId: localMessage.id });
         console.log("메시지 전송 완료:", localMessage);
       } catch (error) {
+        logger.error("CHAT", "메시지 전송 에러", {
+          error: error.message,
+          stack: error.stack,
+        });
         console.error("메시지 전송 에러:", error);
       }
     },
@@ -122,107 +220,6 @@ function useChat() {
   }, []);
 
   /**
-   * 타이핑 상태 전송 (선택적)
-   * @param {boolean} typing - 타이핑 중 여부
-   */
-  const sendTypingStatus = useCallback(
-    (typing) => {
-      if (!socketService || !roomId) {
-        return;
-      }
-
-      socketService.emit("chat:typing", {
-        roomId,
-        isTyping: typing,
-      });
-    },
-    [socketService, roomId]
-  );
-
-  /**
-   * 타이핑 시작 (선택적)
-   */
-  const startTyping = useCallback(() => {
-    // 타이핑 타이머가 이미 있으면 초기화
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current);
-    }
-
-    // 타이핑 상태 전송
-    sendTypingStatus(true);
-
-    // 3초 후 자동으로 타이핑 중지
-    typingTimerRef.current = setTimeout(() => {
-      sendTypingStatus(false);
-    }, 3000);
-  }, [sendTypingStatus]);
-
-  /**
-   * 타이핑 중지 (선택적)
-   */
-  const stopTyping = useCallback(() => {
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = null;
-    }
-
-    sendTypingStatus(false);
-  }, [sendTypingStatus]);
-
-  /**
-   * Socket 이벤트 리스너 설정
-   */
-  useEffect(() => {
-    if (!socketService || !chatServiceRef.current) {
-      return;
-    }
-
-    // 원격 메시지 수신
-    const handleChatMessage = (data) => {
-      const { from, message } = data;
-      console.log("원격 메시지 수신 from:", from);
-
-      // 원격 메시지 생성 (isLocal: false)
-      const remoteMessage = {
-        ...message,
-        senderId: from,
-        isLocal: false,
-      };
-
-      // ChatService에 메시지 추가
-      chatServiceRef.current.addMessage(remoteMessage);
-
-      // UI 업데이트
-      setMessages((prevMessages) => [...prevMessages, remoteMessage]);
-      setUnreadCount((prevCount) => prevCount + 1);
-    };
-
-    // 타이핑 상태 수신 (선택적)
-    const handleChatTyping = (data) => {
-      const { from, isTyping: typing } = data;
-      console.log(`타이핑 상태 수신 from ${from}:`, typing);
-      setIsTyping(typing);
-
-      // 타이핑 상태가 true이면 3초 후 자동으로 false로 변경
-      if (typing) {
-        setTimeout(() => {
-          setIsTyping(false);
-        }, 3000);
-      }
-    };
-
-    // 이벤트 리스너 등록
-    socketService.on("chat:message", handleChatMessage);
-    socketService.on("chat:typing", handleChatTyping);
-
-    // 클린업 함수
-    return () => {
-      socketService.off("chat:message", handleChatMessage);
-      socketService.off("chat:typing", handleChatTyping);
-    };
-  }, [socketService]);
-
-  /**
    * 컴포넌트 언마운트 시 ChatService 정리
    */
   useEffect(() => {
@@ -232,11 +229,6 @@ function useChat() {
         chatServiceRef.current.destroy();
         chatServiceRef.current = null;
       }
-
-      // 타이핑 타이머 정리
-      if (typingTimerRef.current) {
-        clearTimeout(typingTimerRef.current);
-      }
     };
   }, []);
 
@@ -244,11 +236,8 @@ function useChat() {
     messages,
     unreadCount,
     currentUser,
-    isTyping,
     sendMessage,
     clearUnreadCount,
-    startTyping, // 선택적
-    stopTyping, // 선택적
   };
 }
 
