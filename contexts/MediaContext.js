@@ -62,11 +62,17 @@ export function MediaProvider({ children }) {
       const videoTracks = stream.getVideoTracks();
 
       console.log(`로컬 스트림 트랙 정보:`);
-      console.log(`- 비디오 트랙: ${videoTracks.length}개`, videoTracks.map(t => `${t.label} (enabled: ${t.enabled})`));
-      console.log(`- 오디오 트랙: ${audioTracks.length}개`, audioTracks.map(t => `${t.label} (enabled: ${t.enabled})`));
+      console.log(
+        `- 비디오 트랙: ${videoTracks.length}개`,
+        videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
+      console.log(
+        `- 오디오 트랙: ${audioTracks.length}개`,
+        audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
 
       if (audioTracks.length === 0) {
-        console.warn("⚠️ 오디오 트랙이 없습니다!");
+        console.log("⚠️ 오디오 트랙이 없습니다!");
       }
 
       setLocalStream(stream);
@@ -115,14 +121,12 @@ export function MediaProvider({ children }) {
         }));
 
       console.log(`[Phase 19-1] 비디오 디바이스: ${videoDevices.length}개`);
-      videoDevices.forEach((d, i) =>
-        console.log(`  [${i}] ${d.label} (${d.deviceId})`)
-      );
+      // biome-ignore lint/suspicious/useIterableCallbackReturn: print info
+      videoDevices.forEach((d, i) => console.log(`  [${i}] ${d.label} (${d.deviceId})`));
 
       console.log(`[Phase 19-1] 오디오 디바이스: ${audioDevices.length}개`);
-      audioDevices.forEach((d, i) =>
-        console.log(`  [${i}] ${d.label} (${d.deviceId})`)
-      );
+      // biome-ignore lint/suspicious/useIterableCallbackReturn: print info
+      audioDevices.forEach((d, i) => console.log(`  [${i}] ${d.label} (${d.deviceId})`));
 
       return { videoDevices, audioDevices };
     } catch (error) {
@@ -137,93 +141,86 @@ export function MediaProvider({ children }) {
    * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
    * @returns {Promise<MediaStream>}
    */
-  const initializeMediaWithDevice = useCallback(
-    async (videoDeviceId, audioDeviceId) => {
-      try {
-        console.log("[Phase 19-1] 선택된 디바이스로 미디어 초기화 시작");
-        console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
-        console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
+  const initializeMediaWithDevice = useCallback(async (videoDeviceId, audioDeviceId) => {
+    try {
+      console.log("[Phase 19-1] 선택된 디바이스로 미디어 초기화 시작");
+      console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
+      console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
 
-        const constraints = {
-          video: videoDeviceId
-            ? {
-                deviceId: { exact: videoDeviceId },
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              }
-            : {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              },
-          audio: audioDeviceId
-            ? {
-                deviceId: { exact: audioDeviceId },
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              }
-            : {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              },
-        };
+      const constraints = {
+        video: videoDeviceId
+          ? {
+              deviceId: { exact: videoDeviceId },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }
+          : {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+        audio: audioDeviceId
+          ? {
+              deviceId: { exact: audioDeviceId },
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          : {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+      };
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-        console.log("[Phase 19-1] 미디어 스트림 획득 성공");
+      console.log("[Phase 19-1] 미디어 스트림 획득 성공");
 
-        // 트랙 정보 로깅
-        const audioTracks = stream.getAudioTracks();
-        const videoTracks = stream.getVideoTracks();
+      // 트랙 정보 로깅
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
 
-        console.log(`로컬 스트림 트랙 정보:`);
-        console.log(
-          `- 비디오 트랙: ${videoTracks.length}개`,
-          videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      console.log(`로컬 스트림 트랙 정보:`);
+      console.log(
+        `- 비디오 트랙: ${videoTracks.length}개`,
+        videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
+      console.log(
+        `- 오디오 트랙: ${audioTracks.length}개`,
+        audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+      );
+
+      setLocalStream(stream);
+      setIsVideoEnabled(true);
+      setIsAudioEnabled(true);
+
+      return stream;
+    } catch (error) {
+      console.error("[Phase 19-1] 선택된 디바이스로 초기화 실패:", error);
+
+      // 에러 타입별 처리
+      if (error.name === "NotAllowedError") {
+        alert("카메라와 마이크 권한이 필요합니다. 브라우저 설정에서 권한을 허용해주세요.");
+      } else if (error.name === "NotFoundError") {
+        alert("선택한 디바이스를 찾을 수 없습니다. 다른 디바이스를 선택해주세요.");
+      } else if (error.name === "NotReadableError") {
+        alert(
+          `선택한 디바이스가 사용 중입니다.\n다른 브라우저나 애플리케이션에서 디바이스를 사용하고 있는지 확인해주세요.\n\n오류: ${error.message}`
         );
-        console.log(
-          `- 오디오 트랙: ${audioTracks.length}개`,
-          audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
-        );
-
-        setLocalStream(stream);
-        setIsVideoEnabled(true);
-        setIsAudioEnabled(true);
-
-        return stream;
-      } catch (error) {
-        console.error("[Phase 19-1] 선택된 디바이스로 초기화 실패:", error);
-
-        // 에러 타입별 처리
-        if (error.name === "NotAllowedError") {
-          alert(
-            "카메라와 마이크 권한이 필요합니다. 브라우저 설정에서 권한을 허용해주세요."
-          );
-        } else if (error.name === "NotFoundError") {
-          alert(
-            "선택한 디바이스를 찾을 수 없습니다. 다른 디바이스를 선택해주세요."
-          );
-        } else if (error.name === "NotReadableError") {
-          alert(
-            `선택한 디바이스가 사용 중입니다.\n다른 브라우저나 애플리케이션에서 디바이스를 사용하고 있는지 확인해주세요.\n\n오류: ${error.message}`
-          );
-        } else {
-          alert(`미디어 장치 접근 실패: ${error.message}`);
-        }
-
-        throw error;
+      } else {
+        alert(`미디어 장치 접근 실패: ${error.message}`);
       }
-    },
-    []
-  );
+
+      throw error;
+    }
+  }, []);
 
   /**
    * 비디오 활성화/비활성화 토글
    */
   const toggleVideo = useCallback(() => {
     if (!localStream) {
-      console.warn("로컬 스트림이 없습니다.");
+      console.log("로컬 스트림이 없습니다.");
       return;
     }
 
@@ -240,7 +237,7 @@ export function MediaProvider({ children }) {
    */
   const toggleAudio = useCallback(() => {
     if (!localStream) {
-      console.warn("로컬 스트림이 없습니다.");
+      console.log("로컬 스트림이 없습니다.");
       return;
     }
 
@@ -259,7 +256,7 @@ export function MediaProvider({ children }) {
   const stopScreenShare = useCallback(() => {
     try {
       if (!isScreenSharing) {
-        console.warn("화면 공유 중이 아닙니다.");
+        console.log("화면 공유 중이 아닙니다.");
         return;
       }
 
@@ -295,7 +292,7 @@ export function MediaProvider({ children }) {
   const startScreenShare = useCallback(async () => {
     try {
       if (isScreenSharing) {
-        console.warn("이미 화면 공유 중입니다.");
+        console.log("이미 화면 공유 중입니다.");
         return;
       }
 

@@ -56,33 +56,90 @@ export default function VideoPlayer({
       });
 
       // Phase 18-2: SimplePeer 공식 패턴 - stream 받으면 즉시 srcObject 할당 및 재생
-      console.log(`\n📦 [${playerType}] srcObject 할당`);
+      console.log(`\n📦 [${playerType}] srcObject 할당 준비`);
+      console.log(`   - stream.id: ${stream.id}`);
+      console.log(`   - stream.active: ${stream.active}`);
+      console.log(`   - videoTracks: ${videoTracks.length}`);
+      console.log(`   - audioTracks: ${audioTracks.length}`);
+
+      // 트랙 상태 확인 (이미 선언된 videoTracks, audioTracks 재사용)
+      if (videoTracks.length > 0) {
+        const videoTrack = videoTracks[0];
+        console.log(`   - videoTrack.enabled: ${videoTrack.enabled}`);
+        console.log(`   - videoTrack.muted: ${videoTrack.muted}`);
+        console.log(`   - videoTrack.readyState: ${videoTrack.readyState}`);
+      }
+
       videoElement.srcObject = stream;
 
+      console.log(`✅ [${playerType}] srcObject 할당 완료`);
+      console.log(`   - videoElement.srcObject:`, videoElement.srcObject);
+      console.log(`   - videoElement.srcObject === stream:`, videoElement.srcObject === stream);
+      console.log(`   - videoElement.parentElement:`, videoElement.parentElement);
+      console.log(`   - videoElement.offsetWidth:`, videoElement.offsetWidth);
+      console.log(`   - videoElement.offsetHeight:`, videoElement.offsetHeight);
+      console.log(`   - videoElement.style.display:`, videoElement.style.display);
+      console.log(`   - videoElement.hidden:`, videoElement.hidden);
+
       if (!isLocal) {
-        // Phase 18-2: 원격 비디오는 stream 받으면 즉시 재생 시도
-        // SimplePeer 공식 예제 패턴: peer.on('stream') → video.srcObject = stream → video.play()
+        // Phase 18-2: 원격 비디오는 stream 받으면 재생 준비
         console.log(
-          `🎬 [${playerType} Phase 18-2] 원격 스트림 수신, 즉시 재생 시작 (SimplePeer 공식 패턴)`
+          `🎬 [${playerType} Phase 18-2] 원격 스트림 수신, 재생 준비 (SimplePeer 공식 패턴)`
         );
         console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
         console.log(`   - videoElement.paused: ${videoElement.paused}`);
         console.log(`   - videoElement.muted: ${videoElement.muted}`);
 
-        videoElement
-          .play()
-          .then(() => {
-            console.log(`✅ [${playerType}] 재생 성공`);
+        // readyState가 충분히 높으면 즉시 재생, 아니면 loadedmetadata 이벤트 대기
+        const tryPlay = () => {
+          console.log(
+            `🎮 [${playerType}] play() 호출 시도 (readyState: ${videoElement.readyState})`
+          );
+          videoElement
+            .play()
+            .then(() => {
+              console.log(`✅ [${playerType}] 재생 성공`);
+              console.log(`   - readyState: ${videoElement.readyState}`);
+              console.log(`   - paused: ${videoElement.paused}`);
+              console.log(`   - currentTime: ${videoElement.currentTime}`);
+            })
+            .catch((err) => {
+              console.error(`❌ [${playerType}] 재생 실패:`, err);
+              console.error(`   - error.name: ${err.name}`);
+              console.error(`   - error.message: ${err.message}`);
+              console.error(`   - readyState: ${videoElement.readyState}`);
+            });
+        };
+
+        // readyState가 HAVE_METADATA(1) 이상이면 즉시 재생
+        if (videoElement.readyState >= 1) {
+          console.log(`📺 [${playerType}] 메타데이터 이미 로드됨, 즉시 재생`);
+          tryPlay();
+        } else {
+          console.log(`⏳ [${playerType}] 메타데이터 로딩 대기 중...`);
+          console.log(`   - 현재 readyState: ${videoElement.readyState}`);
+          console.log(`   - loadedmetadata 이벤트 리스너 등록 중...`);
+
+          // loadedmetadata 이벤트를 기다렸다가 재생
+          const onLoadedMetadata = () => {
+            console.log(`📺 [${playerType}] 메타데이터 로드 완료, 재생 시작`);
             console.log(`   - readyState: ${videoElement.readyState}`);
-            console.log(`   - paused: ${videoElement.paused}`);
-            console.log(`   - currentTime: ${videoElement.currentTime}`);
-          })
-          .catch((err) => {
-            console.error(`❌ [${playerType}] 재생 실패:`, err);
-            console.error(`   - error.name: ${err.name}`);
-            console.error(`   - error.message: ${err.message}`);
-            console.error(`   - readyState: ${videoElement.readyState}`);
-          });
+            tryPlay();
+          };
+          videoElement.addEventListener("loadedmetadata", onLoadedMetadata, { once: true });
+          console.log(`✅ [${playerType}] loadedmetadata 이벤트 리스너 등록 완료`);
+
+          // 타임아웃 설정 (10초 후에도 로드되지 않으면 강제 재생 시도)
+          setTimeout(() => {
+            if (videoElement.readyState === 0) {
+              console.log(`⚠️ [${playerType}] 10초 경과, 여전히 readyState: 0`);
+              console.log(`   - srcObject:`, videoElement.srcObject);
+              console.log(`   - stream.active:`, stream.active);
+              console.log(`   - 강제 재생 시도...`);
+              tryPlay();
+            }
+          }, 10000);
+        }
       } else {
         // 로컬 비디오는 autoPlay 속성으로 자동 재생
         console.log(`📹 [${playerType}] 로컬 비디오, autoPlay 사용`);
@@ -148,10 +205,10 @@ export default function VideoPlayer({
       {/* 비디오 엘리먼트 */}
       <video
         ref={videoRef}
-        autoPlay={true}
+        autoPlay={true} // 모든 비디오 autoPlay (브라우저 정책 준수)
         playsInline
-        // muted={isLocal} // 로컬 비디오는 음소거 (에코 방지)
-        muted={true} // 로컬 비디오는 음소거 (에코 방지)
+        muted={isLocal} // 로컬만 음소거 (에코 방지), 원격은 음소거 해제 (상대방 오디오 재생)
+        style={{ minWidth: "100px", minHeight: "100px" }} // 최소 크기 보장
         className={`w-full h-full object-cover ${
           isLocal
             ? !isVideoEnabled || !stream

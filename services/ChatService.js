@@ -38,7 +38,7 @@ class ChatService {
    */
   sendMessage(content) {
     if (!content || content.trim() === "") {
-      console.warn("빈 메시지는 전송할 수 없습니다.");
+      console.log("빈 메시지는 전송할 수 없습니다.");
       return null;
     }
 
@@ -66,7 +66,7 @@ class ChatService {
    */
   addMessage(message) {
     if (!message) {
-      console.warn("유효하지 않은 메시지입니다.");
+      console.log("유효하지 않은 메시지입니다.");
       return;
     }
 

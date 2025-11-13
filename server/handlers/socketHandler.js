@@ -145,7 +145,9 @@ const registerSocketHandlers = (io, socket, roomManager) => {
       socketId: socket.id,
       nickname: newParticipantNickname,
     });
-    console.log(`[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송, 닉네임: ${newParticipantNickname || "없음"}`);
+    console.log(
+      `[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송, 닉네임: ${newParticipantNickname || "없음"}`
+    );
   });
 
   /**
@@ -279,13 +281,22 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     const { roomId, event } = result.data;
-    console.log(`[whiteboard:event] 방 ${roomId}에서 이벤트 발생: ${event.type}`);
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+
+    console.log(
+      `[whiteboard:event] [${senderNickname}] 방 ${roomId}에서 이벤트 발생: ${event.type}`
+    );
 
     // 방의 다른 참가자들에게 이벤트 중계
     socket.to(roomId).emit("whiteboard:event", {
+      roomId,
       from: socket.id,
       event,
     });
+
+    console.log(`[whiteboard:event] 방 ${roomId}의 다른 참가자들에게 이벤트 브로드캐스트 완료`);
   });
 
   /**

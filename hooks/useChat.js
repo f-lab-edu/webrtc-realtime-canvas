@@ -39,7 +39,7 @@ function useChat() {
 
     const socketId = socketService.getSocketId();
     if (!socketId) {
-      console.warn("Socket ID가 없습니다.");
+      console.log("Socket ID가 없습니다.");
       return;
     }
 
@@ -158,7 +158,7 @@ function useChat() {
 
       if (!content || content.trim() === "") {
         logger.warn("CHAT", "빈 메시지 전송 시도");
-        console.warn("빈 메시지는 전송할 수 없습니다.");
+        console.log("빈 메시지는 전송할 수 없습니다.");
         return;
       }
 

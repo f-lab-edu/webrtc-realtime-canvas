@@ -83,7 +83,7 @@ class ServerLogger {
         console.error(logMessage);
         break;
       case "warn":
-        console.warn(logMessage);
+        console.log(logMessage);
         break;
       case "info":
         console.info(logMessage);
