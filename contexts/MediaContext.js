@@ -97,12 +97,12 @@ export function MediaProvider({ children }) {
   }, []);
 
   /**
-   * Phase 19-1: 사용 가능한 미디어 디바이스 목록 조회
+   * 사용 가능한 미디어 디바이스 목록 조회
    * @returns {Promise<{videoDevices: Array, audioDevices: Array}>}
    */
   const getAvailableDevices = useCallback(async () => {
     try {
-      console.log("[Phase 19-1] 디바이스 목록 조회 시작");
+      console.log("디바이스 목록 조회 시작");
 
       const devices = await navigator.mediaDevices.enumerateDevices();
 
@@ -120,30 +120,30 @@ export function MediaProvider({ children }) {
           label: device.label || `마이크 ${device.deviceId.slice(0, 8)}`,
         }));
 
-      console.log(`[Phase 19-1] 비디오 디바이스: ${videoDevices.length}개`);
+      console.log(`비디오 디바이스: ${videoDevices.length}개`);
       // biome-ignore lint/suspicious/useIterableCallbackReturn: print info
       videoDevices.forEach((d, i) => console.log(`  [${i}] ${d.label} (${d.deviceId})`));
 
-      console.log(`[Phase 19-1] 오디오 디바이스: ${audioDevices.length}개`);
+      console.log(`오디오 디바이스: ${audioDevices.length}개`);
       // biome-ignore lint/suspicious/useIterableCallbackReturn: print info
       audioDevices.forEach((d, i) => console.log(`  [${i}] ${d.label} (${d.deviceId})`));
 
       return { videoDevices, audioDevices };
     } catch (error) {
-      console.error("[Phase 19-1] 디바이스 목록 조회 실패:", error);
+      console.error("디바이스 목록 조회 실패:", error);
       throw error;
     }
   }, []);
 
   /**
-   * Phase 19-1: 특정 디바이스로 미디어 스트림 초기화
+   * 특정 디바이스로 미디어 스트림 초기화
    * @param {string} videoDeviceId - 선택된 비디오 디바이스 ID
    * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
    * @returns {Promise<MediaStream>}
    */
   const initializeMediaWithDevice = useCallback(async (videoDeviceId, audioDeviceId) => {
     try {
-      console.log("[Phase 19-1] 선택된 디바이스로 미디어 초기화 시작");
+      console.log("선택된 디바이스로 미디어 초기화 시작");
       console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
       console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
 
@@ -174,7 +174,7 @@ export function MediaProvider({ children }) {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      console.log("[Phase 19-1] 미디어 스트림 획득 성공");
+      console.log("미디어 스트림 획득 성공");
 
       // 트랙 정보 로깅
       const audioTracks = stream.getAudioTracks();
@@ -196,7 +196,7 @@ export function MediaProvider({ children }) {
 
       return stream;
     } catch (error) {
-      console.error("[Phase 19-1] 선택된 디바이스로 초기화 실패:", error);
+      console.error("선택된 디바이스로 초기화 실패:", error);
 
       // 에러 타입별 처리
       if (error.name === "NotAllowedError") {
@@ -411,7 +411,7 @@ export function MediaProvider({ children }) {
     stopScreenShare,
     cleanupMedia,
 
-    // Phase 19-1: 디바이스 선택 함수
+    // 디바이스 선택 함수
     getAvailableDevices,
     initializeMediaWithDevice,
   };

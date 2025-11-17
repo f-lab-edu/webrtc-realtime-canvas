@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * DeviceSelector 컴포넌트
- * Phase 19-2: 카메라/마이크 선택 UI
+ * 카메라/마이크 선택 UI
  *
  * @param {Object} props
  * @param {Function} props.onDeviceSelected - 디바이스 선택 완료 콜백

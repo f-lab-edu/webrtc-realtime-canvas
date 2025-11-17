@@ -23,7 +23,7 @@ import { saveNicknameToSession } from "@/lib/nicknameUtils";
  *
  * 방 입장 플로우:
  * 1. 닉네임 입력 (하이브리드 방식: 세션 스토리지에서 기본 닉네임 로드)
- * 2. 디바이스 선택 (Phase 19-3)
+ * 2. 디바이스 선택
  * 3. 방 참가
  */
 export default function RoomPage() {
@@ -59,7 +59,7 @@ export default function RoomPage() {
     });
   }, [remoteStream]);
 
-  // Phase 19-3: 디바이스 선택 완료 상태
+  // 디바이스 선택 완료 상태
   const [isDeviceSelected, setIsDeviceSelected] = useState(false);
 
   // 디버그 패널 표시 상태
@@ -82,18 +82,18 @@ export default function RoomPage() {
   };
 
   /**
-   * Phase 19-3: 디바이스 선택 완료 후 방 입장
+   * 디바이스 선택 완료 후 방 입장
    */
   const handleDeviceSelected = async () => {
     try {
-      console.log("[RoomPage Phase 19-3] 디바이스 선택 완료, 방 입장 시작");
+      console.log("[RoomPage] 디바이스 선택 완료, 방 입장 시작");
       setIsDeviceSelected(true);
 
       // 방 참가
       await joinRoom(roomId);
-      console.log("[RoomPage Phase 19-3] 방 참가 완료");
+      console.log("[RoomPage] 방 참가 완료");
     } catch (error) {
-      console.error("[RoomPage Phase 19-3] 방 참가 실패:", error);
+      console.error("[RoomPage] 방 참가 실패:", error);
       alert("방 참가에 실패했습니다. 다시 시도해주세요.");
       setIsDeviceSelected(false);
     }
@@ -107,7 +107,7 @@ export default function RoomPage() {
   }
 
   /**
-   * Phase 19-3: 디바이스 선택 화면 표시 (두 번째 단계)
+   * 디바이스 선택 화면 표시 (두 번째 단계)
    */
   if (!isDeviceSelected) {
     return (

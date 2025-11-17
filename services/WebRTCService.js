@@ -96,23 +96,23 @@ class WebRTCService {
         `WebRTC 초기화 - 환경: ${isDevelopment ? "개발" : "프로덕션"}, trickle: ${!isDevelopment}`
       );
 
-      // Phase 17: peer.on('signal') 첫 호출 시 ICE/Connection 모니터링 설정
+      // peer.on('signal') 첫 호출 시 ICE/Connection 모니터링 설정
       let isMonitoringSetup = false;
 
       // 시그널 이벤트 (SDP offer/answer, ICE candidate)
       this.peer.on("signal", (signal) => {
         console.log("WebRTC 시그널 생성:", signal.type || "candidate");
 
-        // Phase 17: 첫 signal 이벤트 시 _pc 모니터링 설정
+        // 첫 signal 이벤트 시 _pc 모니터링 설정
         if (!isMonitoringSetup && this.peer._pc) {
           console.log(
-            "🎯 [WebRTCService Phase 17] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작"
+            "🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작"
           );
 
           // ICE Connection State 모니터링
           this.peer._pc.oniceconnectionstatechange = () => {
             const state = this.peer._pc.iceConnectionState;
-            console.log(`🧊 [Phase 17] ICE Connection State: ${state}`);
+            console.log(`🧊 [WebRTCService] ICE Connection State: ${state}`);
 
             if (state === "failed") {
               console.error("❌ ICE Connection Failed - TURN 서버 필요할 수 있음");
@@ -122,21 +122,21 @@ class WebRTCService {
           // RTCPeerConnection State 모니터링 (이중 안전장치)
           this.peer._pc.onconnectionstatechange = () => {
             const state = this.peer._pc.connectionState;
-            console.log(`🔗 [Phase 17] RTCPeerConnection State: ${state}`);
+            console.log(`🔗 [WebRTCService] RTCPeerConnection State: ${state}`);
 
             if (state === "connected") {
               console.log("✅ Peer Connection Established");
 
-              // Phase 17: RTCPeerConnection이 connected 상태가 되면
+              // RTCPeerConnection이 connected 상태가 되면
               // peer.on('connect')와 동일하게 처리 (이중 안전장치)
               console.log(
-                "🎬 [WebRTCService Phase 17] RTCPeerConnection connected, connect 핸들러 호출"
+                "🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출"
               );
 
               if (this.handlers.connect) {
                 this.handlers.connect();
               } else {
-                console.log("⚠️ [WebRTCService Phase 17] connect 핸들러 미등록 (타이밍 이슈)");
+                console.log("⚠️ [WebRTCService] connect 핸들러 미등록 (타이밍 이슈)");
               }
             }
 
@@ -149,7 +149,7 @@ class WebRTCService {
           };
 
           isMonitoringSetup = true;
-          console.log("✅ [WebRTCService Phase 17] ICE/Connection 모니터링 설정 완료");
+          console.log("✅ [WebRTCService] ICE/Connection 모니터링 설정 완료");
         }
 
         // 기존 시그널 핸들러 호출
@@ -190,7 +190,7 @@ class WebRTCService {
           console.log(`       - readyState: ${t.readyState}`);
         });
 
-        // Phase 14: 비디오 트랙이 muted 상태면 unmute 대기
+        // 비디오 트랙이 muted 상태면 unmute 대기
         if (videoTracks.length > 0 && videoTracks[0].muted) {
           const videoTrack = videoTracks[0];
           console.log(`⏳ [WebRTCService] 비디오 트랙 muted, unmute 대기 중...`);
@@ -226,12 +226,12 @@ class WebRTCService {
           }
         }
 
-        // Phase 18-1: peer.on('stream')을 P2P 연결 완료 신호로 사용
+        // peer.on('stream')을 P2P 연결 완료 신호로 사용
         // SimplePeer는 video/audio 전용 연결에서 peer.on('connect') 이벤트를 발생시키지 않음
         // (connect 이벤트는 data channel이 있을 때만 발생)
-        console.log(`🎬 [WebRTCService Phase 18-1] peer.on('stream') 수신 = P2P 연결 완료`);
+        console.log(`🎬 [WebRTCService] peer.on('stream') 수신 = P2P 연결 완료`);
         if (this.handlers.connect) {
-          console.log(`✅ [WebRTCService Phase 18-1] connect 핸들러 호출 (stream 기반)`);
+          console.log(`✅ [WebRTCService] connect 핸들러 호출 (stream 기반)`);
           this.handlers.connect();
         }
 

@@ -98,8 +98,8 @@ function useWebRTC() {
         setConnectionState("connecting");
         targetSocketIdRef.current = targetSocketId;
 
-        // Phase 16-1: 핸들러를 initialize() 전에 등록
-        console.log("🎯 [useWebRTC] Phase 16-1: 핸들러 등록 (initialize 전)");
+        // 핸들러를 initialize() 전에 등록
+        console.log("🎯 [useWebRTC] 핸들러 등록 (initialize 전)");
 
         // 1. 시그널 이벤트 핸들러 - 먼저 등록!
         webrtcServiceRef.current.onSignal((signal) => {
@@ -131,7 +131,7 @@ function useWebRTC() {
 
         // 2. 원격 스트림 수신 핸들러 - 먼저 등록!
         webrtcServiceRef.current.onStream((stream) => {
-          console.log(`\n========== [useWebRTC Phase 16-1 onStream 핸들러] ==========`);
+          console.log(`\n========== [useWebRTC onStream 핸들러] ==========`);
           console.log(`⏰ 타임스탬프: ${new Date().toISOString()}`);
           console.log(`🆔 Stream ID: ${stream.id}`);
           console.log(`📊 Stream 상태:`);
@@ -176,11 +176,11 @@ function useWebRTC() {
 
         // 3. 연결 성공 핸들러 - 먼저 등록!
         webrtcServiceRef.current.onConnect(() => {
-          console.log("✅ [useWebRTC Phase 16-1] peer.on('connect') 이벤트 수신");
+          console.log("✅ [useWebRTC] peer.on('connect') 이벤트 수신");
           console.log("🎬 [useWebRTC] P2P 연결 완료, 비디오 재생 준비됨");
           setConnectionState("connected");
 
-          // Phase 15: P2P 연결 완료 이벤트 발생
+          // P2P 연결 완료 이벤트 발생
           window.dispatchEvent(new CustomEvent("webrtc-peer-connected"));
         });
 
@@ -198,7 +198,7 @@ function useWebRTC() {
         });
 
         // 6. WebRTCService 초기화 (핸들러 등록 후!)
-        console.log("🚀 [useWebRTC Phase 16-1] WebRTC 초기화 시작 (핸들러 등록 완료)");
+        console.log("🚀 [useWebRTC] WebRTC 초기화 시작 (핸들러 등록 완료)");
         webrtcServiceRef.current.initialize(initiator, localStreamRef.current);
 
         hasInitializedRef.current = true;

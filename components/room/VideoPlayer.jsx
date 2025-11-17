@@ -34,7 +34,7 @@ export default function VideoPlayer({
       const timestamp = new Date().toISOString();
       const playerType = label || (isLocal ? "로컬" : "원격");
 
-      console.log(`\n========== [VideoPlayer useEffect 시작 - Phase 15] ==========`);
+      console.log(`\n========== [VideoPlayer useEffect 시작] ==========`);
       console.log(`🎬 타입: ${playerType}`);
       console.log(`⏰ 타임스탬프: ${timestamp}`);
       console.log(`🆔 Stream ID: ${stream.id}`);
@@ -55,7 +55,7 @@ export default function VideoPlayer({
         );
       });
 
-      // Phase 18-2: SimplePeer 공식 패턴 - stream 받으면 즉시 srcObject 할당 및 재생
+      // SimplePeer 공식 패턴 - stream 받으면 즉시 srcObject 할당 및 재생
       console.log(`\n📦 [${playerType}] srcObject 할당 준비`);
       console.log(`   - stream.id: ${stream.id}`);
       console.log(`   - stream.active: ${stream.active}`);
@@ -82,9 +82,9 @@ export default function VideoPlayer({
       console.log(`   - videoElement.hidden:`, videoElement.hidden);
 
       if (!isLocal) {
-        // Phase 18-2: 원격 비디오는 stream 받으면 재생 준비
+        // 원격 비디오는 stream 받으면 재생 준비
         console.log(
-          `🎬 [${playerType} Phase 18-2] 원격 스트림 수신, 재생 준비 (SimplePeer 공식 패턴)`
+          `🎬 [${playerType}] 원격 스트림 수신, 재생 준비 (SimplePeer 공식 패턴)`
         );
         console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
         console.log(`   - videoElement.paused: ${videoElement.paused}`);
