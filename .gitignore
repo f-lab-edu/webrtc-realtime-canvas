@@ -249,7 +249,7 @@ $RECYCLE.BIN/
 
 # additional
 .claude
-/documents/**
+# /documents/**
 claude.md
 
 .kiro
