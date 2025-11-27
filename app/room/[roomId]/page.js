@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
-import DeviceSelector from "@/components/room/DeviceSelector";
 import NicknameInput from "@/components/room/NicknameInput";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
@@ -33,13 +32,7 @@ export default function RoomPage() {
 
   // Context 및 Hooks
   const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
-  const {
-    localStream,
-    remoteStream,
-    isVideoEnabled,
-    getAvailableDevices,
-    initializeMediaWithDevice,
-  } = useMediaContext();
+  const { localStream, remoteStream, isVideoEnabled } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
@@ -59,9 +52,6 @@ export default function RoomPage() {
     });
   }, [remoteStream]);
 
-  // 디바이스 선택 완료 상태
-  const [isDeviceSelected, setIsDeviceSelected] = useState(false);
-
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
 
@@ -70,53 +60,35 @@ export default function RoomPage() {
 
   /**
    * 닉네임 설정 완료 핸들러
-   * 닉네임 설정 후 디바이스 선택 단계로 진행
+   * 닉네임 설정 후 즉시 방 입장 (DeviceSelector 단계 제거)
    */
-  const handleNicknameSet = (nickname) => {
-    console.log("[RoomPage] 닉네임 설정 완료:", nickname);
-    setNickname(nickname); // RoomContext에 닉네임 설정
-    setIsNicknameSet(true);
-
-    // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
-    saveNicknameToSession(nickname);
-  };
-
-  /**
-   * 디바이스 선택 완료 후 방 입장
-   */
-  const handleDeviceSelected = async () => {
+  const handleNicknameSet = async (nickname) => {
     try {
-      console.log("[RoomPage] 디바이스 선택 완료, 방 입장 시작");
-      setIsDeviceSelected(true);
+      console.log("[RoomPage] 닉네임 설정 완료:", nickname);
+      setNickname(nickname); // RoomContext에 닉네임 설정
 
-      // 방 참가
+      // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
+      saveNicknameToSession(nickname);
+
+      // 닉네임 설정 완료 표시
+      setIsNicknameSet(true);
+
+      // 즉시 방 참가
+      console.log("[RoomPage] 방 입장 시작");
       await joinRoom(roomId);
       console.log("[RoomPage] 방 참가 완료");
     } catch (error) {
       console.error("[RoomPage] 방 참가 실패:", error);
       alert("방 참가에 실패했습니다. 다시 시도해주세요.");
-      setIsDeviceSelected(false);
+      setIsNicknameSet(false);
     }
   };
 
   /**
-   * 닉네임 입력 화면 표시 (첫 번째 단계)
+   * 닉네임 입력 화면 표시
    */
   if (!isNicknameSet) {
     return <NicknameInput onNicknameSet={handleNicknameSet} roomId={roomId} />;
-  }
-
-  /**
-   * 디바이스 선택 화면 표시 (두 번째 단계)
-   */
-  if (!isDeviceSelected) {
-    return (
-      <DeviceSelector
-        onDeviceSelected={handleDeviceSelected}
-        getAvailableDevices={getAvailableDevices}
-        initializeMediaWithDevice={initializeMediaWithDevice}
-      />
-    );
   }
 
   /**

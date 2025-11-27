@@ -11,7 +11,7 @@ import { useRoomContext } from "@/contexts/RoomContext";
 function useWebRTC() {
   // Context에서 필요한 값 가져오기
   const { socketService, roomId, participants, nickname, participantNicknames } = useRoomContext();
-  const { webrtcService, localStream, setRemoteStream } = useMediaContext();
+  const { webrtcService, localStream, setRemoteStream, participationMode } = useMediaContext();
 
   // WebRTC 연결 상태
   const [connectionState, setConnectionState] = useState("disconnected");
@@ -32,6 +32,7 @@ function useWebRTC() {
   const setRemoteStreamRef = useRef(setRemoteStream);
   const nicknameRef = useRef(nickname);
   const participantNicknamesRef = useRef(participantNicknames);
+  const participationModeRef = useRef(participationMode);
 
   // ref 업데이트
   useEffect(() => {
@@ -41,7 +42,16 @@ function useWebRTC() {
     setRemoteStreamRef.current = setRemoteStream;
     nicknameRef.current = nickname;
     participantNicknamesRef.current = participantNicknames;
-  }, [localStream, socketService, webrtcService, setRemoteStream, nickname, participantNicknames]);
+    participationModeRef.current = participationMode;
+  }, [
+    localStream,
+    socketService,
+    webrtcService,
+    setRemoteStream,
+    nickname,
+    participantNicknames,
+    participationMode,
+  ]);
 
   /**
    * WebRTC 연결 초기화
@@ -224,17 +234,20 @@ function useWebRTC() {
 
   /**
    * 연결 시작 시도 함수
-   * localStream이 준비되지 않았으면 대기열에 추가, 준비되었으면 즉시 연결 시작
+   * localStream이 준비되지 않았으면 participationMode 체크 후 처리
    */
   const tryStartConnection = useCallback(
     (targetSocketId, asInitiator) => {
       const mySocketId = socketServiceRef.current?.socket?.id;
       const role = asInitiator ? "발신자(Offer 생성)" : "수신자(Answer 생성)";
+      const currentMode = participationModeRef.current;
+
       console.log(
         `[tryStartConnection] 연결 시도\n` +
           `  - 내 소켓: ${mySocketId}\n` +
           `  - 대상 소켓: ${targetSocketId}\n` +
-          `  - 역할: ${role} (initiator: ${asInitiator})`
+          `  - 역할: ${role} (initiator: ${asInitiator})\n` +
+          `  - 참여 모드: ${currentMode}`
       );
 
       // 자기 자신인지 확인
@@ -243,8 +256,20 @@ function useWebRTC() {
         return false;
       }
 
-      // localStream이 준비되지 않았으면 대기열에 추가
+      // localStream이 준비되지 않았으면 participationMode 체크
       if (!localStreamRef.current) {
+        // 시청자 모드면 빈 스트림으로 연결
+        if (currentMode === "viewer") {
+          console.log(
+            `[tryStartConnection] ✅ 시청자 모드, 빈 스트림으로 WebRTC 연결 시작\n` +
+              `  - 대상: ${targetSocketId}`
+          );
+          // localStream을 null로 전달 (WebRTCService가 빈 MediaStream 생성)
+          initializeWebRTC(asInitiator, targetSocketId);
+          return true;
+        }
+
+        // 일반 참여자 모드면 대기열에 추가
         console.log(
           `[tryStartConnection] ⏳ 로컬 스트림 대기 중, 연결 대기열에 추가\n` +
             `  - 대기 정보: { target: ${targetSocketId}, initiator: ${asInitiator} }`
