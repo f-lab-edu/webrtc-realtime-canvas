@@ -760,6 +760,14 @@ export function MediaProvider({ children }) {
         screenStreamRef.current = null;
       }
 
+      // WebRTC Peer 정리
+      const peer = webrtcServiceRef.current?.peer;
+      if (peer && !peer.destroyed) {
+        console.log("WebRTC Peer 연결 종료");
+        peer.destroy();
+        webrtcServiceRef.current.peer = null;
+      }
+
       // 원격 스트림 정리
       setRemoteStream(null);
 
@@ -769,11 +777,25 @@ export function MediaProvider({ children }) {
       setIsScreenSharing(false);
       originalVideoTrackRef.current = null;
 
+      // WebRTC 상태 머신 초기화
+      if (resetWebRTCInitState) {
+        resetWebRTCInitState();
+      }
+      if (resetWebRTCReconnectionState) {
+        resetWebRTCReconnectionState();
+      }
+
+      // Optional Media 상태 초기화
+      setParticipationMode("participant");
+      setHasMediaPermission(false);
+      setIsReconnecting(false);
+      setReconnectionError(null);
+
       console.log("미디어 리소스 정리 완료");
     } catch (error) {
       console.error("미디어 정리 에러:", error);
     }
-  }, [localStream]);
+  }, [localStream, resetWebRTCInitState, resetWebRTCReconnectionState]);
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {

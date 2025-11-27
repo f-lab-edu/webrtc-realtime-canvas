@@ -32,9 +32,15 @@ export default function RoomPage() {
   const router = useRouter();
 
   // Context 및 Hooks
-  const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
-  const { localStream, remoteStream, isVideoEnabled, setParticipationMode, initializeMedia } =
-    useMediaContext();
+  const { joinRoom, leaveRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
+  const {
+    localStream,
+    remoteStream,
+    isVideoEnabled,
+    setParticipationMode,
+    initializeMedia,
+    cleanupMedia,
+  } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
@@ -142,6 +148,29 @@ export default function RoomPage() {
     }
   };
 
+  /**
+   * 홈으로 돌아가기 핸들러
+   * 미디어 리소스 정리 후 방 퇴장
+   */
+  const handleGoHome = () => {
+    try {
+      console.log("[RoomPage] 홈으로 돌아가기: 리소스 정리 시작");
+
+      // 1. 미디어 리소스 정리 (WebRTC Peer 포함)
+      cleanupMedia();
+
+      // 2. 방 퇴장 (Socket 정리)
+      leaveRoom();
+
+      // 3. 홈으로 이동
+      router.push("/");
+    } catch (error) {
+      console.error("[RoomPage] 홈 이동 중 에러:", error);
+      // 에러가 있어도 홈으로 이동
+      router.push("/");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-950">
       {/* 상단 헤더 */}
@@ -153,7 +182,7 @@ export default function RoomPage() {
 
         <div className="flex items-center gap-2">
           <Button
-            onClick={() => router.push("/")}
+            onClick={handleGoHome}
             variant="outline"
             size="sm"
             className="text-white h-8"

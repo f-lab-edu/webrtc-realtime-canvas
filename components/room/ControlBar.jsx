@@ -23,15 +23,30 @@ export default function ControlBar({ onSettingsClick }) {
     toggleAudio,
     startScreenShare,
     stopScreenShare,
+    cleanupMedia,
   } = useMediaContext();
 
   /**
    * 통화 종료 핸들러
+   * 미디어 리소스 정리 후 방 퇴장
    */
   const handleEndCall = () => {
-    console.log("통화 종료");
-    leaveRoom();
-    router.push("/");
+    try {
+      console.log("[ControlBar] 통화 종료: 리소스 정리 시작");
+
+      // 1. 미디어 리소스 정리 (WebRTC Peer 포함)
+      cleanupMedia();
+
+      // 2. 방 퇴장 (Socket 정리)
+      leaveRoom();
+
+      // 3. 홈으로 이동
+      router.push("/");
+    } catch (error) {
+      console.error("[ControlBar] 통화 종료 중 에러:", error);
+      // 에러가 있어도 홈으로 이동
+      router.push("/");
+    }
   };
 
   /**
