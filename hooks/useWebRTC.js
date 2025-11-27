@@ -17,6 +17,12 @@ function useWebRTC() {
     setRemoteStream,
     participationMode,
     setReconnectMediaCallback,
+    webrtcReconnectionState,
+    startWebRTCReconnection,
+    completeWebRTCReconnection,
+    startRemoteWebRTCReconnection,
+    setTargetSocketId,
+    resetWebRTCReconnectionState,
   } = useMediaContext();
 
   // WebRTC 연결 상태
@@ -29,10 +35,12 @@ function useWebRTC() {
   const isInitializingRef = useRef(false); // 초기화 진행 중 플래그
   const pendingOfferRef = useRef(null);
   const pendingConnectionRef = useRef(null); // 대기 중인 연결 정보 저장 (localStream 준비 대기)
-  const targetSocketIdRef = useRef(null); // 연결 대상 소켓 ID 저장
-  const isReconnectingRef = useRef(false); // 재연결 진행 중 플래그
-  const isRemoteReconnectingRef = useRef(false); // 상대방 재연결 중 플래그
-  const reconnectTimeoutRef = useRef(null); // 재연결 타임아웃 타이머
+
+  // 재연결 관련 ref는 MediaContext의 webrtcReconnectionState로 대체됨
+  // - targetSocketId → webrtcReconnectionState.targetSocketId
+  // - isReconnecting → webrtcReconnectionState.isReconnecting
+  // - isRemoteReconnecting → webrtcReconnectionState.isRemoteReconnecting
+  // - reconnectTimeout → webrtcReconnectionState.reconnectTimeout
 
   // 최신 값을 참조하기 위한 ref
   const localStreamRef = useRef(localStream);
@@ -115,19 +123,18 @@ function useWebRTC() {
         isInitializingRef.current = true;
         setIsInitiator(initiator);
         setConnectionState("connecting");
-        targetSocketIdRef.current = targetSocketId;
+        setTargetSocketId(targetSocketId); // MediaContext 함수 사용
 
         // 핸들러를 initialize() 전에 등록
         console.log("🎯 [useWebRTC] 핸들러 등록 (initialize 전)");
 
         // 1. 시그널 이벤트 핸들러 - 먼저 등록!
         webrtcServiceRef.current.onSignal((signal) => {
-          if (!socketServiceRef.current || !targetSocketIdRef.current) {
+          // targetSocketId는 initializeWebRTC의 파라미터 값 사용 (closure로 캡처됨)
+          if (!socketServiceRef.current || !targetSocketId) {
             console.error("SocketService 또는 대상 소켓 ID가 없습니다.");
             return;
           }
-
-          const targetSocketId = targetSocketIdRef.current;
           const myNickname = nicknameRef.current || "알 수 없음";
           const targetNickname =
             participantNicknamesRef.current.get(targetSocketId) || "알 수 없음";
@@ -238,7 +245,7 @@ function useWebRTC() {
         isInitializingRef.current = false;
       }
     },
-    [setRemoteStream]
+    [setRemoteStream, setTargetSocketId]
   );
 
   /**
@@ -506,95 +513,84 @@ function useWebRTC() {
    * media:reconnecting 수신 이벤트 핸들러
    * 상대방이 디바이스 변경으로 재연결을 시작했을 때 호출됨
    */
-  const handleMediaReconnecting = useCallback((data) => {
-    const { from, timestamp } = data;
-    console.log(`\n========== [handleMediaReconnecting] 상대방 재연결 시작 ==========`);
-    console.log(`⏰ 수신 타임스탬프: ${new Date().toISOString()}`);
-    console.log(`👤 발신자: ${from}`);
-    console.log(`🕐 상대방 timestamp: ${timestamp}`);
+  const handleMediaReconnecting = useCallback(
+    (data) => {
+      const { from, timestamp } = data;
+      console.log(`\n========== [handleMediaReconnecting] 상대방 재연결 시작 ==========`);
+      console.log(`⏰ 수신 타임스탬프: ${new Date().toISOString()}`);
+      console.log(`👤 발신자: ${from}`);
+      console.log(`🕐 상대방 timestamp: ${timestamp}`);
 
-    // 동시 재연결 감지 (타임스탬프 비교)
-    if (isReconnectingRef.current) {
-      const myTimestamp = Date.now();
-      console.log(`⚠️ 동시 재연결 감지!`);
-      console.log(`   - 내 timestamp: ${myTimestamp}`);
-      console.log(`   - 상대방 timestamp: ${timestamp}`);
+      // 동시 재연결 감지 (타임스탬프 비교)
+      if (webrtcReconnectionState.isReconnecting) {
+        const myTimestamp = Date.now();
+        console.log(`⚠️ 동시 재연결 감지!`);
+        console.log(`   - 내 timestamp: ${myTimestamp}`);
+        console.log(`   - 상대방 timestamp: ${timestamp}`);
 
-      // 먼저 시작한 쪽이 우선권 (낮은 timestamp)
-      if (timestamp < myTimestamp) {
-        console.log(`✅ 상대방이 먼저 시작, 내 재연결 취소하고 대기 모드`);
+        // 먼저 시작한 쪽이 우선권 (낮은 timestamp)
+        if (timestamp < myTimestamp) {
+          console.log(`✅ 상대방이 먼저 시작, 내 재연결 취소하고 대기 모드`);
 
-        // 내 재연결 취소
-        isReconnectingRef.current = false;
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
+          // MediaContext 함수로 상대방 재연결 대기 모드 설정
+          startRemoteWebRTCReconnection();
+
+          // 기존 Peer 정리
+          const currentPeer = webrtcServiceRef.current.peer;
+          if (currentPeer && !currentPeer.destroyed) {
+            currentPeer.destroy();
+            webrtcServiceRef.current.peer = null;
+          }
+          hasInitializedRef.current = false;
+          isInitializingRef.current = false;
+        } else {
+          console.log(`✅ 내가 먼저 시작, 계속 진행`);
+          return;
         }
+      } else {
+        // 동시 재연결 아님, 일반 대기 모드
+        console.log(`📥 상대방 재연결 대기 모드 진입`);
 
-        // 대기 모드 설정
-        isRemoteReconnectingRef.current = true;
+        // MediaContext 함수로 상대방 재연결 대기 모드 설정
+        startRemoteWebRTCReconnection();
 
         // 기존 Peer 정리
         const currentPeer = webrtcServiceRef.current.peer;
         if (currentPeer && !currentPeer.destroyed) {
+          console.log(`🔨 기존 Peer 정리`);
           currentPeer.destroy();
           webrtcServiceRef.current.peer = null;
         }
+
+        // 플래그 리셋
         hasInitializedRef.current = false;
         isInitializingRef.current = false;
-      } else {
-        console.log(`✅ 내가 먼저 시작, 계속 진행`);
-        return;
-      }
-    } else {
-      // 동시 재연결 아님, 일반 대기 모드
-      console.log(`📥 상대방 재연결 대기 모드 진입`);
-      isRemoteReconnectingRef.current = true;
-
-      // 기존 Peer 정리
-      const currentPeer = webrtcServiceRef.current.peer;
-      if (currentPeer && !currentPeer.destroyed) {
-        console.log(`🔨 기존 Peer 정리`);
-        currentPeer.destroy();
-        webrtcServiceRef.current.peer = null;
       }
 
-      // 플래그 리셋
-      hasInitializedRef.current = false;
-      isInitializingRef.current = false;
-    }
-
-    console.log(`========== [handleMediaReconnecting] 대기 모드 설정 완료 ==========\n`);
-  }, []);
+      console.log(`========== [handleMediaReconnecting] 대기 모드 설정 완료 ==========\n`);
+    },
+    [webrtcReconnectionState.isReconnecting, startRemoteWebRTCReconnection]
+  );
 
   /**
    * media:reconnected 수신 이벤트 핸들러
    * 상대방이 재연결을 완료했을 때 호출됨
    */
-  const handleMediaReconnected = useCallback((data) => {
-    const { from } = data;
-    console.log(`\n========== [handleMediaReconnected] 상대방 재연결 완료 ==========`);
-    console.log(`⏰ 수신 타임스탬프: ${new Date().toISOString()}`);
-    console.log(`👤 발신자: ${from}`);
+  const handleMediaReconnected = useCallback(
+    (data) => {
+      const { from } = data;
+      console.log(`\n========== [handleMediaReconnected] 상대방 재연결 완료 ==========`);
+      console.log(`⏰ 수신 타임스탬프: ${new Date().toISOString()}`);
+      console.log(`👤 발신자: ${from}`);
 
-    // 대기 모드 해제
-    isRemoteReconnectingRef.current = false;
+      // MediaContext 함수로 재연결 완료 처리
+      completeWebRTCReconnection();
 
-    // 재연결 플래그도 해제 (안전 장치)
-    if (isReconnectingRef.current) {
-      console.log(`✅ 내 재연결 플래그도 해제`);
-      isReconnectingRef.current = false;
-
-      // 타임아웃 클리어
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-    }
-
-    console.log(`✅ 재연결 완료 처리됨`);
-    console.log(`========== [handleMediaReconnected] 종료 ==========\n`);
-  }, []);
+      console.log(`✅ 재연결 완료 처리됨`);
+      console.log(`========== [handleMediaReconnected] 종료 ==========\n`);
+    },
+    [completeWebRTCReconnection]
+  );
 
   /**
    * 참가자 퇴장 이벤트 핸들러
@@ -603,22 +599,8 @@ function useWebRTC() {
   const handleParticipantLeft = useCallback(() => {
     console.log("참가자 퇴장, WebRTC 연결 강제 종료");
 
-    // 재연결 관련 플래그 강제 해제
-    if (isReconnectingRef.current) {
-      console.log("⚠️ 재연결 중 상대방 이탈, 재연결 취소");
-      isReconnectingRef.current = false;
-
-      // 타임아웃 클리어
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-    }
-
-    if (isRemoteReconnectingRef.current) {
-      console.log("⚠️ 상대방 재연결 중 이탈");
-      isRemoteReconnectingRef.current = false;
-    }
+    // MediaContext 함수로 재연결 상태 초기화
+    resetWebRTCReconnectionState();
 
     // 즉시 Peer 파괴
     const currentPeer = webrtcServiceRef.current.peer;
@@ -640,10 +622,9 @@ function useWebRTC() {
     setConnectionState("disconnected");
     hasInitializedRef.current = false;
     isInitializingRef.current = false;
-    targetSocketIdRef.current = null;
 
     console.log("✅ WebRTC 연결 정리 완료");
-  }, []);
+  }, [resetWebRTCReconnectionState]);
 
   /**
    * 미디어 재연결 함수
@@ -658,13 +639,14 @@ function useWebRTC() {
       console.log(`🆕 newStream 제공됨: ${!!newStream}`);
 
       // 재연결 중 플래그 설정
-      if (isReconnectingRef.current) {
+      if (webrtcReconnectionState.isReconnecting) {
         console.log("⚠️ 이미 재연결 진행 중입니다.");
         return;
       }
 
       // targetSocketId 확인
-      if (!targetSocketIdRef.current) {
+      const targetSocketId = webrtcReconnectionState.targetSocketId;
+      if (!targetSocketId) {
         console.error("❌ 대상 소켓 ID가 없습니다. 재연결 취소");
         return;
       }
@@ -676,16 +658,18 @@ function useWebRTC() {
       }
 
       try {
-        isReconnectingRef.current = true;
         const timestamp = Date.now();
+
+        // MediaContext 함수로 재연결 시작
+        startWebRTCReconnection(targetSocketId, timestamp);
 
         // 1. 재연결 시작 시그널링 송신
         console.log(`📡 [reconnectMedia] media:reconnecting 이벤트 송신`);
-        console.log(`   - 대상: ${targetSocketIdRef.current}`);
+        console.log(`   - 대상: ${targetSocketId}`);
         console.log(`   - timestamp: ${timestamp}`);
 
         socketServiceRef.current.emit("media:reconnecting", {
-          to: targetSocketIdRef.current,
+          to: targetSocketId,
           timestamp,
         });
 
@@ -725,29 +709,27 @@ function useWebRTC() {
         const currentInitiator = isInitiator;
         console.log(`🔄 [reconnectMedia] 재연결 시도`);
         console.log(`   - 역할 유지: ${currentInitiator ? "발신자(Offer)" : "수신자(Answer)"}`);
-        console.log(`   - 대상: ${targetSocketIdRef.current}`);
+        console.log(`   - 대상: ${targetSocketId}`);
 
         // 7. WebRTC 재초기화
-        initializeWebRTC(currentInitiator, targetSocketIdRef.current);
-
-        // 8. 재연결 타임아웃 설정 (10초)
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (isReconnectingRef.current) {
-            console.error("❌ [reconnectMedia] 재연결 타임아웃 (10초)");
-            isReconnectingRef.current = false;
-            setConnectionState("disconnected");
-            // MediaContext에 에러 알림 (필요 시)
-          }
-        }, 10000);
+        initializeWebRTC(currentInitiator, targetSocketId);
 
         console.log(`========== [reconnectMedia] 재연결 절차 완료 ==========\n`);
       } catch (error) {
         console.error("❌ [reconnectMedia] 재연결 중 오류:", error);
-        isReconnectingRef.current = false;
+        // MediaContext 함수로 재연결 완료 (에러 시에도 상태 정리)
+        completeWebRTCReconnection();
         throw error;
       }
     },
-    [isInitiator, initializeWebRTC]
+    [
+      isInitiator,
+      initializeWebRTC,
+      webrtcReconnectionState.isReconnecting,
+      webrtcReconnectionState.targetSocketId,
+      startWebRTCReconnection,
+      completeWebRTCReconnection,
+    ]
   );
 
   /**

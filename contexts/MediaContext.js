@@ -26,8 +26,16 @@ export function MediaProvider({ children }) {
   // Optional 미디어 지원 상태
   const [participationMode, setParticipationMode] = useState("participant"); // 'viewer' | 'participant'
   const [hasMediaPermission, setHasMediaPermission] = useState(false);
-  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false); // 미디어 디바이스 재초기화 중 플래그
   const [reconnectionError, setReconnectionError] = useState(null);
+
+  // WebRTC 재연결 상태 (useWebRTC에서 이동)
+  const [webrtcReconnectionState, setWebrtcReconnectionState] = useState({
+    isReconnecting: false, // WebRTC P2P 재연결 진행 중
+    isRemoteReconnecting: false, // 상대방 재연결 중
+    reconnectTimeout: null, // 재연결 타임아웃 타이머
+    targetSocketId: null, // 연결 대상 소켓 ID
+  });
 
   // WebRTCService 인스턴스 (ref로 관리하여 재생성 방지)
   const webrtcServiceRef = useRef(null);
@@ -51,6 +59,108 @@ export function MediaProvider({ children }) {
   const setReconnectMediaCallback = useCallback((reconnectMediaFn) => {
     reconnectMediaRef.current = reconnectMediaFn;
     console.log("[MediaContext] reconnectMedia 콜백 등록 완료");
+  }, []);
+
+  /**
+   * WebRTC 재연결 시작
+   * @param {string} targetSocketId - 연결 대상 소켓 ID
+   * @param {number} timestamp - 재연결 시작 타임스탬프
+   */
+  const startWebRTCReconnection = useCallback((targetSocketId, timestamp = Date.now()) => {
+    console.log(
+      `[MediaContext] WebRTC 재연결 시작 - 대상: ${targetSocketId}, timestamp: ${timestamp}`
+    );
+
+    // 타임아웃 설정 (10초)
+    const timeoutId = setTimeout(() => {
+      console.error("❌ [MediaContext] WebRTC 재연결 타임아웃 (10초)");
+      setWebrtcReconnectionState((prev) => ({
+        ...prev,
+        isReconnecting: false,
+        reconnectTimeout: null,
+      }));
+    }, 10000);
+
+    setWebrtcReconnectionState({
+      isReconnecting: true,
+      isRemoteReconnecting: false,
+      reconnectTimeout: timeoutId,
+      targetSocketId,
+    });
+  }, []);
+
+  /**
+   * WebRTC 재연결 완료
+   */
+  const completeWebRTCReconnection = useCallback(() => {
+    console.log("[MediaContext] WebRTC 재연결 완료");
+
+    setWebrtcReconnectionState((prev) => {
+      // 타임아웃 클리어
+      if (prev.reconnectTimeout) {
+        clearTimeout(prev.reconnectTimeout);
+      }
+
+      return {
+        isReconnecting: false,
+        isRemoteReconnecting: false,
+        reconnectTimeout: null,
+        targetSocketId: prev.targetSocketId, // targetSocketId는 유지 (연결 유지)
+      };
+    });
+  }, []);
+
+  /**
+   * 상대방 재연결 시작 감지
+   */
+  const startRemoteWebRTCReconnection = useCallback(() => {
+    console.log("[MediaContext] 상대방 WebRTC 재연결 감지");
+
+    setWebrtcReconnectionState((prev) => {
+      // 내 재연결 타임아웃 클리어 (상대방이 우선권 가짐)
+      if (prev.reconnectTimeout) {
+        clearTimeout(prev.reconnectTimeout);
+      }
+
+      return {
+        ...prev,
+        isReconnecting: false, // 내 재연결 취소
+        isRemoteReconnecting: true, // 상대방 재연결 대기
+        reconnectTimeout: null,
+      };
+    });
+  }, []);
+
+  /**
+   * targetSocketId 설정
+   * @param {string} socketId - 연결 대상 소켓 ID
+   */
+  const setTargetSocketId = useCallback((socketId) => {
+    setWebrtcReconnectionState((prev) => ({
+      ...prev,
+      targetSocketId: socketId,
+    }));
+  }, []);
+
+  /**
+   * WebRTC 재연결 상태 초기화
+   */
+  const resetWebRTCReconnectionState = useCallback(() => {
+    console.log("[MediaContext] WebRTC 재연결 상태 초기화");
+
+    setWebrtcReconnectionState((prev) => {
+      // 타임아웃 클리어
+      if (prev.reconnectTimeout) {
+        clearTimeout(prev.reconnectTimeout);
+      }
+
+      return {
+        isReconnecting: false,
+        isRemoteReconnecting: false,
+        reconnectTimeout: null,
+        targetSocketId: null,
+      };
+    });
   }, []);
 
   /**
@@ -601,6 +711,14 @@ export function MediaProvider({ children }) {
     isReconnecting,
     reconnectionError,
     setReconnectionError,
+
+    // WebRTC 재연결 상태 (useWebRTC에서 사용)
+    webrtcReconnectionState,
+    startWebRTCReconnection,
+    completeWebRTCReconnection,
+    startRemoteWebRTCReconnection,
+    setTargetSocketId,
+    resetWebRTCReconnectionState,
 
     // WebRTCService 인스턴스
     webrtcService: webrtcServiceRef.current,
