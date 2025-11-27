@@ -25,13 +25,20 @@ class WebRTCService {
   /**
    * SimplePeer 인스턴스 초기화
    * @param {boolean} initiator - offer를 생성하는 측인지 여부
-   * @param {MediaStream} stream - 로컬 미디어 스트림
+   * @param {MediaStream|null} stream - 로컬 미디어 스트림 (optional, 시청자 모드면 null 가능)
    * @param {Object} config - STUN/TURN 서버 설정 (선택적)
    */
   initialize(initiator, stream, config = {}) {
     try {
       this.isInitiator = initiator;
-      this.localStream = stream;
+
+      // stream이 null이면 빈 MediaStream 생성 (시청자 모드 지원)
+      if (!stream) {
+        console.log("⚠️ [WebRTCService] stream이 null, 빈 MediaStream 생성 (시청자 모드)");
+        this.localStream = new MediaStream();
+      } else {
+        this.localStream = stream;
+      }
 
       // 환경 변수에서 STUN/TURN 서버 설정 가져오기
       const iceServers = [];
@@ -67,9 +74,11 @@ class WebRTCService {
       };
 
       // 로컬 스트림 트랙 확인
-      const audioTracks = stream.getAudioTracks();
-      const videoTracks = stream.getVideoTracks();
-      console.log(`WebRTC 초기화 - 로컬 스트림 트랙:`);
+      const audioTracks = this.localStream.getAudioTracks();
+      const videoTracks = this.localStream.getVideoTracks();
+      const hasStream = stream !== null;
+
+      console.log(`WebRTC 초기화 - 로컬 스트림 트랙 (hasStream: ${hasStream}):`);
       console.log(
         `- 비디오: ${videoTracks.length}개`,
         videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
@@ -79,13 +88,17 @@ class WebRTCService {
         audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
       );
 
+      if (!hasStream) {
+        console.log("ℹ️ [WebRTCService] 시청자 모드로 WebRTC 연결 시작 (빈 스트림)");
+      }
+
       // 개발 환경 체크
       const isDevelopment = process.env.NODE_ENV === "development";
 
       // SimplePeer 인스턴스 생성
       this.peer = new SimplePeer({
         initiator,
-        stream,
+        stream: this.localStream, // 빈 MediaStream 또는 실제 스트림
         // 개발 환경: trickle false (안정성 우선)
         // 프로덕션: trickle true (성능 우선)
         trickle: !isDevelopment,
@@ -105,9 +118,7 @@ class WebRTCService {
 
         // 첫 signal 이벤트 시 _pc 모니터링 설정
         if (!isMonitoringSetup && this.peer._pc) {
-          console.log(
-            "🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작"
-          );
+          console.log("🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작");
 
           // ICE Connection State 모니터링
           this.peer._pc.oniceconnectionstatechange = () => {
@@ -129,9 +140,7 @@ class WebRTCService {
 
               // RTCPeerConnection이 connected 상태가 되면
               // peer.on('connect')와 동일하게 처리 (이중 안전장치)
-              console.log(
-                "🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출"
-              );
+              console.log("🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출");
 
               if (this.handlers.connect) {
                 this.handlers.connect();

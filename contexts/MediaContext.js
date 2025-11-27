@@ -23,6 +23,12 @@ export function MediaProvider({ children }) {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
+  // Optional 미디어 지원 상태
+  const [participationMode, setParticipationMode] = useState("participant"); // 'viewer' | 'participant'
+  const [hasMediaPermission, setHasMediaPermission] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectionError, setReconnectionError] = useState(null);
+
   // WebRTCService 인스턴스 (ref로 관리하여 재생성 방지)
   const webrtcServiceRef = useRef(null);
 
@@ -136,6 +142,112 @@ export function MediaProvider({ children }) {
   }, []);
 
   /**
+   * 미디어 스트림 재초기화 (디바이스 변경 시 사용)
+   * @param {string} videoDeviceId - 선택된 비디오 디바이스 ID
+   * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
+   * @returns {Promise<MediaStream>}
+   */
+  const reinitializeMedia = useCallback(
+    async (videoDeviceId, audioDeviceId) => {
+      try {
+        console.log("미디어 스트림 재초기화 시작");
+        setIsReconnecting(true);
+        setReconnectionError(null);
+
+        // 1. 기존 localStream 정리 (tracks stop)
+        if (localStream) {
+          console.log("기존 로컬 스트림 정리 중...");
+          localStream.getTracks().forEach((track) => {
+            track.stop();
+            console.log(`트랙 중지: ${track.kind} - ${track.label}`);
+          });
+        }
+
+        // 2. 새 디바이스로 스트림 생성
+        console.log("새 디바이스로 스트림 생성 시작");
+        console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
+        console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
+
+        const constraints = {
+          video: videoDeviceId
+            ? {
+                deviceId: { exact: videoDeviceId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+          audio: audioDeviceId
+            ? {
+                deviceId: { exact: audioDeviceId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              }
+            : {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+        };
+
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        console.log("새 미디어 스트림 획득 성공");
+
+        // 트랙 정보 로깅
+        const audioTracks = newStream.getAudioTracks();
+        const videoTracks = newStream.getVideoTracks();
+
+        console.log("새 로컬 스트림 트랙 정보:");
+        console.log(
+          `- 비디오 트랙: ${videoTracks.length}개`,
+          videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+        );
+        console.log(
+          `- 오디오 트랙: ${audioTracks.length}개`,
+          audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
+        );
+
+        // 3. 상태 업데이트
+        setLocalStream(newStream);
+        setIsVideoEnabled(true);
+        setIsAudioEnabled(true);
+        setParticipationMode("participant");
+        setHasMediaPermission(true);
+        setIsReconnecting(false);
+
+        console.log("미디어 스트림 재초기화 완료");
+        return newStream;
+      } catch (error) {
+        console.error("미디어 스트림 재초기화 실패:", error);
+
+        // 에러 타입별 처리
+        let errorMessage = "미디어 장치 재초기화 실패";
+
+        if (error.name === "NotAllowedError") {
+          errorMessage =
+            "카메라와 마이크 권한이 필요합니다. 브라우저 설정에서 권한을 허용해주세요.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage = "선택한 디바이스를 찾을 수 없습니다. 다른 디바이스를 선택해주세요.";
+        } else if (error.name === "NotReadableError") {
+          errorMessage = `선택한 디바이스가 사용 중입니다.\n다른 브라우저나 애플리케이션에서 디바이스를 사용하고 있는지 확인해주세요.`;
+        } else {
+          errorMessage = `미디어 장치 접근 실패: ${error.message}`;
+        }
+
+        setReconnectionError(errorMessage);
+        setIsReconnecting(false);
+
+        throw error;
+      }
+    },
+    [localStream]
+  );
+
+  /**
    * 특정 디바이스로 미디어 스트림 초기화
    * @param {string} videoDeviceId - 선택된 비디오 디바이스 ID
    * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
@@ -214,6 +326,40 @@ export function MediaProvider({ children }) {
       throw error;
     }
   }, []);
+
+  /**
+   * 시청자 모드에서 일반 참여자 모드로 전환
+   * @param {string} videoDeviceId - 선택된 비디오 디바이스 ID
+   * @param {string} audioDeviceId - 선택된 오디오 디바이스 ID
+   * @returns {Promise<MediaStream>}
+   */
+  const switchToParticipantMode = useCallback(
+    async (videoDeviceId, audioDeviceId) => {
+      try {
+        // 시청자 모드 체크
+        if (participationMode !== "viewer") {
+          console.log("이미 참여자 모드입니다.");
+          return null;
+        }
+
+        console.log("시청자 → 참여자 모드 전환 시작");
+
+        // reinitializeMedia 호출
+        const newStream = await reinitializeMedia(videoDeviceId, audioDeviceId);
+
+        console.log("참여자 모드 전환 완료");
+        return newStream;
+      } catch (error) {
+        console.error("참여자 모드 전환 실패:", error);
+
+        // 사용자 알림
+        alert(`참여자 모드로 전환할 수 없습니다.\n${error.message || "알 수 없는 오류"}`);
+
+        throw error;
+      }
+    },
+    [participationMode, reinitializeMedia]
+  );
 
   /**
    * 비디오 활성화/비활성화 토글
@@ -400,6 +546,14 @@ export function MediaProvider({ children }) {
     isAudioEnabled,
     isScreenSharing,
 
+    // Optional 미디어 지원 상태
+    participationMode,
+    setParticipationMode,
+    hasMediaPermission,
+    setHasMediaPermission,
+    isReconnecting,
+    reconnectionError,
+
     // WebRTCService 인스턴스
     webrtcService: webrtcServiceRef.current,
 
@@ -414,6 +568,8 @@ export function MediaProvider({ children }) {
     // 디바이스 선택 함수
     getAvailableDevices,
     initializeMediaWithDevice,
+    reinitializeMedia,
+    switchToParticipantMode,
   };
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;
