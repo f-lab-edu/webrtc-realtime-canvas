@@ -4,6 +4,8 @@
  */
 import {
   iceCandidateSchema,
+  mediaReconnectedSchema,
+  mediaReconnectingSchema,
   roomJoinSchema,
   roomLeaveSchema,
   setNicknameSchema,
@@ -297,6 +299,75 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     });
 
     console.log(`[whiteboard:event] 방 ${roomId}의 다른 참가자들에게 이벤트 브로드캐스트 완료`);
+  });
+
+  /**
+   * media:reconnecting 이벤트 핸들러
+   * 클라이언트가 디바이스 변경으로 미디어 재연결을 시작할 때 호출됨
+   * 상대방에게 재연결 시작을 알려서 대기 상태로 만듦
+   */
+  socket.on("media:reconnecting", (data) => {
+    // Zod로 파라미터 검증
+    const result = mediaReconnectingSchema.safeParse(data);
+
+    if (!result.success) {
+      socket.emit("error", {
+        message: "유효하지 않은 재연결 데이터",
+        details: result.error.errors,
+      });
+      return;
+    }
+
+    const { to, timestamp } = result.data;
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+    console.log(
+      `[media:reconnecting] [${senderNickname}] -> [${receiverNickname}] 재연결 시작, timestamp: ${timestamp}`
+    );
+
+    // 대상 소켓에게 재연결 시작 알림
+    io.to(to).emit("media:reconnecting", {
+      from: socket.id,
+      timestamp,
+    });
+
+    console.log(`[media:reconnecting] 재연결 알림 전송 완료`);
+  });
+
+  /**
+   * media:reconnected 이벤트 핸들러
+   * 클라이언트가 미디어 재연결을 완료했을 때 호출됨
+   * 상대방에게 재연결 완료를 알려서 대기 상태 해제
+   */
+  socket.on("media:reconnected", (data) => {
+    // Zod로 파라미터 검증
+    const result = mediaReconnectedSchema.safeParse(data);
+
+    if (!result.success) {
+      socket.emit("error", {
+        message: "유효하지 않은 재연결 완료 데이터",
+        details: result.error.errors,
+      });
+      return;
+    }
+
+    const { to } = result.data;
+
+    // 닉네임 조회
+    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+    console.log(`[media:reconnected] [${senderNickname}] -> [${receiverNickname}] 재연결 완료`);
+
+    // 대상 소켓에게 재연결 완료 알림
+    io.to(to).emit("media:reconnected", {
+      from: socket.id,
+    });
+
+    console.log(`[media:reconnected] 재연결 완료 알림 전송 완료`);
   });
 
   /**

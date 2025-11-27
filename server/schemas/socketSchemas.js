@@ -124,3 +124,18 @@ export const chatTypingSchema = z.object({
   roomId: roomIdSchema,
   isTyping: z.boolean(),
 });
+
+/**
+ * 미디어 재연결 시작 스키마
+ */
+export const mediaReconnectingSchema = z.object({
+  to: socketIdSchema,
+  timestamp: z.number().int().positive(),
+});
+
+/**
+ * 미디어 재연결 완료 스키마
+ */
+export const mediaReconnectedSchema = z.object({
+  to: socketIdSchema,
+});

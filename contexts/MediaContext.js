@@ -36,10 +36,22 @@ export function MediaProvider({ children }) {
   const screenStreamRef = useRef(null);
   const originalVideoTrackRef = useRef(null);
 
+  // WebRTC 재연결 콜백 함수 저장 (useWebRTC에서 제공)
+  const reconnectMediaRef = useRef(null);
+
   // WebRTCService 인스턴스 초기화
   if (!webrtcServiceRef.current) {
     webrtcServiceRef.current = new WebRTCService();
   }
+
+  /**
+   * useWebRTC에서 제공하는 reconnectMedia 콜백 함수 등록
+   * @param {Function} reconnectMediaFn - reconnectMedia(newStream) 함수
+   */
+  const setReconnectMediaCallback = useCallback((reconnectMediaFn) => {
+    reconnectMediaRef.current = reconnectMediaFn;
+    console.log("[MediaContext] reconnectMedia 콜백 등록 완료");
+  }, []);
 
   /**
    * 로컬 미디어 스트림 초기화 (웹캠 + 마이크)
@@ -149,22 +161,25 @@ export function MediaProvider({ children }) {
    */
   const reinitializeMedia = useCallback(
     async (videoDeviceId, audioDeviceId) => {
+      // 이전 스트림 백업 (롤백용)
+      const previousStream = localStream;
+
       try {
-        console.log("미디어 스트림 재초기화 시작");
+        console.log("\n========== [MediaContext] 미디어 스트림 재초기화 시작 ==========");
         setIsReconnecting(true);
         setReconnectionError(null);
 
         // 1. 기존 localStream 정리 (tracks stop)
         if (localStream) {
-          console.log("기존 로컬 스트림 정리 중...");
+          console.log("🧹 기존 로컬 스트림 정리 중...");
           localStream.getTracks().forEach((track) => {
             track.stop();
-            console.log(`트랙 중지: ${track.kind} - ${track.label}`);
+            console.log(`  - 트랙 중지: ${track.kind} - ${track.label}`);
           });
         }
 
-        // 2. 새 디바이스로 스트림 생성
-        console.log("새 디바이스로 스트림 생성 시작");
+        // 2. 새 디바이스로 스트림 생성 (재연결 전에 먼저 생성)
+        console.log("🎥 새 디바이스로 스트림 생성 시작");
         console.log(`  - 비디오 디바이스: ${videoDeviceId}`);
         console.log(`  - 오디오 디바이스: ${audioDeviceId}`);
 
@@ -195,23 +210,49 @@ export function MediaProvider({ children }) {
 
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 
-        console.log("새 미디어 스트림 획득 성공");
+        console.log("✅ 새 미디어 스트림 획득 성공");
 
         // 트랙 정보 로깅
         const audioTracks = newStream.getAudioTracks();
         const videoTracks = newStream.getVideoTracks();
 
-        console.log("새 로컬 스트림 트랙 정보:");
+        console.log("📊 새 로컬 스트림 트랙 정보:");
         console.log(
-          `- 비디오 트랙: ${videoTracks.length}개`,
+          `  - 비디오 트랙: ${videoTracks.length}개`,
           videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
         );
         console.log(
-          `- 오디오 트랙: ${audioTracks.length}개`,
+          `  - 오디오 트랙: ${audioTracks.length}개`,
           audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
         );
 
-        // 3. 상태 업데이트
+        // 3. ⚠️ 중요: WebRTC 재연결 트리거 (newStream 전달)
+        if (reconnectMediaRef.current) {
+          console.log("🔄 WebRTC 재연결 트리거 (reconnectMedia 호출)");
+          console.log(`  - newStream ID: ${newStream.id}`);
+
+          try {
+            // reconnectMedia는 async지만 await하지 않음
+            // (WebRTC 연결은 이벤트 기반으로 비동기 처리됨)
+            reconnectMediaRef.current(newStream);
+            console.log("✅ reconnectMedia 호출 완료 (비동기 처리 시작)");
+          } catch (reconnectError) {
+            console.error("❌ reconnectMedia 호출 실패:", reconnectError);
+
+            // 롤백: 이전 스트림 복원
+            console.log("🔙 롤백: 이전 스트림 복원 시도");
+            if (previousStream) {
+              setLocalStream(previousStream);
+              console.log("✅ 이전 스트림 복원 완료");
+            }
+
+            throw new Error(`WebRTC 재연결 실패: ${reconnectError.message}`);
+          }
+        } else {
+          console.log("⚠️ reconnectMedia 콜백이 등록되지 않음 (WebRTC 재연결 스킵)");
+        }
+
+        // 4. Context 상태 업데이트
         setLocalStream(newStream);
         setIsVideoEnabled(true);
         setIsAudioEnabled(true);
@@ -219,10 +260,10 @@ export function MediaProvider({ children }) {
         setHasMediaPermission(true);
         setIsReconnecting(false);
 
-        console.log("미디어 스트림 재초기화 완료");
+        console.log("========== [MediaContext] 미디어 스트림 재초기화 완료 ==========\n");
         return newStream;
       } catch (error) {
-        console.error("미디어 스트림 재초기화 실패:", error);
+        console.error("❌ [MediaContext] 미디어 스트림 재초기화 실패:", error);
 
         // 에러 타입별 처리
         let errorMessage = "미디어 장치 재초기화 실패";
@@ -240,6 +281,12 @@ export function MediaProvider({ children }) {
 
         setReconnectionError(errorMessage);
         setIsReconnecting(false);
+
+        // 롤백: 이전 스트림 복원 (에러 발생 시)
+        if (previousStream && !localStream) {
+          console.log("🔙 에러 발생, 이전 스트림 복원");
+          setLocalStream(previousStream);
+        }
 
         throw error;
       }
@@ -553,6 +600,7 @@ export function MediaProvider({ children }) {
     setHasMediaPermission,
     isReconnecting,
     reconnectionError,
+    setReconnectionError,
 
     // WebRTCService 인스턴스
     webrtcService: webrtcServiceRef.current,
@@ -570,6 +618,9 @@ export function MediaProvider({ children }) {
     initializeMediaWithDevice,
     reinitializeMedia,
     switchToParticipantMode,
+
+    // WebRTC 재연결 콜백 등록
+    setReconnectMediaCallback,
   };
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;
