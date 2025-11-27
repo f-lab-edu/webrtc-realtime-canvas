@@ -37,6 +37,14 @@ export function MediaProvider({ children }) {
     targetSocketId: null, // 연결 대상 소켓 ID
   });
 
+  // WebRTC 초기화 상태 머신 (useWebRTC에서 이동)
+  const [webrtcInitState, setWebrtcInitState] = useState({
+    status: "idle", // 'idle' | 'initializing' | 'ready' | 'error'
+    isProcessingSignal: false, // 시그널 처리 중
+    pendingOffer: null, // 대기 중인 Offer
+    pendingConnection: null, // 대기 중인 연결 정보 { targetSocketId, asInitiator }
+  });
+
   // WebRTCService 인스턴스 (ref로 관리하여 재생성 방지)
   const webrtcServiceRef = useRef(null);
 
@@ -161,6 +169,88 @@ export function MediaProvider({ children }) {
         targetSocketId: null,
       };
     });
+  }, []);
+
+  /**
+   * WebRTC 초기화 시작
+   */
+  const startWebRTCInitialization = useCallback(() => {
+    console.log("[MediaContext] WebRTC 초기화 시작");
+    setWebrtcInitState({
+      status: "initializing",
+      isProcessingSignal: false,
+      pendingOffer: null,
+      pendingConnection: null,
+    });
+  }, []);
+
+  /**
+   * WebRTC 초기화 완료
+   */
+  const completeWebRTCInitialization = useCallback(() => {
+    console.log("[MediaContext] WebRTC 초기화 완료");
+    setWebrtcInitState((prev) => ({
+      ...prev,
+      status: "ready",
+    }));
+  }, []);
+
+  /**
+   * WebRTC 초기화 에러
+   * @param {string} errorMessage - 에러 메시지
+   */
+  const setWebRTCInitializationError = useCallback((errorMessage) => {
+    console.error("[MediaContext] WebRTC 초기화 에러:", errorMessage);
+    setWebrtcInitState((prev) => ({
+      ...prev,
+      status: "error",
+    }));
+  }, []);
+
+  /**
+   * WebRTC 초기화 상태 리셋
+   */
+  const resetWebRTCInitState = useCallback(() => {
+    console.log("[MediaContext] WebRTC 초기화 상태 리셋");
+    setWebrtcInitState({
+      status: "idle",
+      isProcessingSignal: false,
+      pendingOffer: null,
+      pendingConnection: null,
+    });
+  }, []);
+
+  /**
+   * 시그널 처리 중 플래그 설정
+   * @param {boolean} isProcessing - 처리 중 여부
+   */
+  const setSignalProcessing = useCallback((isProcessing) => {
+    setWebrtcInitState((prev) => ({
+      ...prev,
+      isProcessingSignal: isProcessing,
+    }));
+  }, []);
+
+  /**
+   * pending Offer 설정
+   * @param {Object|null} offer - Offer 데이터 { from, signal }
+   */
+  const setPendingOffer = useCallback((offer) => {
+    setWebrtcInitState((prev) => ({
+      ...prev,
+      pendingOffer: offer,
+    }));
+  }, []);
+
+  /**
+   * pending Connection 설정
+   * @param {Object|null} connection - 연결 정보 { targetSocketId, asInitiator }
+   */
+  const setPendingConnection = useCallback((connection) => {
+    setWebrtcInitState((prev) => ({
+      ...prev,
+      pendingConnection: connection,
+    }));
   }, []);
 
   /**
@@ -719,6 +809,16 @@ export function MediaProvider({ children }) {
     startRemoteWebRTCReconnection,
     setTargetSocketId,
     resetWebRTCReconnectionState,
+
+    // WebRTC 초기화 상태 머신 (useWebRTC에서 사용)
+    webrtcInitState,
+    startWebRTCInitialization,
+    completeWebRTCInitialization,
+    setWebRTCInitializationError,
+    resetWebRTCInitState,
+    setSignalProcessing,
+    setPendingOffer,
+    setPendingConnection,
 
     // WebRTCService 인스턴스
     webrtcService: webrtcServiceRef.current,
