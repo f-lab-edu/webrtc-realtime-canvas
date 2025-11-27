@@ -6,6 +6,7 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import NicknameInput from "@/components/room/NicknameInput";
+import SettingsPanel from "@/components/room/SettingsPanel";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
@@ -57,6 +58,9 @@ export default function RoomPage() {
 
   // URL 복사 성공 상태
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // 설정 패널 표시 상태
+  const [showSettings, setShowSettings] = useState(false);
 
   /**
    * 닉네임 설정 완료 핸들러
@@ -197,7 +201,10 @@ export default function RoomPage() {
       </div>
 
       {/* 하단 컨트롤 바 */}
-      <ControlBar />
+      <ControlBar onSettingsClick={() => setShowSettings(true)} />
+
+      {/* 설정 패널 */}
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* 오디오 디버그 패널 (개발 중에만 표시) */}
       {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}
