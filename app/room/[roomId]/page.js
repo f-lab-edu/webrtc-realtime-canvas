@@ -33,7 +33,8 @@ export default function RoomPage() {
 
   // Context 및 Hooks
   const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
-  const { localStream, remoteStream, isVideoEnabled } = useMediaContext();
+  const { localStream, remoteStream, isVideoEnabled, setParticipationMode, initializeMedia } =
+    useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
   // 채팅 훅
@@ -64,15 +65,42 @@ export default function RoomPage() {
 
   /**
    * 닉네임 설정 완료 핸들러
-   * 닉네임 설정 후 즉시 방 입장 (DeviceSelector 단계 제거)
+   * 닉네임 설정 후 즉시 방 입장 (Optional Media 지원)
+   *
+   * @param {string} nickname - 사용자 닉네임
+   * @param {boolean} skipMediaInit - 카메라/마이크 없이 입장 여부 (기본값: false)
    */
-  const handleNicknameSet = async (nickname) => {
+  const handleNicknameSet = async (nickname, skipMediaInit = false) => {
     try {
-      console.log("[RoomPage] 닉네임 설정 완료:", nickname);
+      console.log(`[RoomPage] 닉네임 설정 완료: ${nickname}, 미디어 스킵: ${skipMediaInit}`);
       setNickname(nickname); // RoomContext에 닉네임 설정
+
+      // participationMode 설정 (시청자 vs 일반 참여자)
+      if (skipMediaInit) {
+        console.log("[RoomPage] 시청자 모드로 설정");
+        setParticipationMode("viewer");
+      } else {
+        console.log("[RoomPage] 일반 참여자 모드로 설정");
+        setParticipationMode("participant");
+      }
 
       // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
       saveNicknameToSession(nickname);
+
+      // 미디어 초기화 (체크박스 미체크 시에만)
+      if (!skipMediaInit) {
+        console.log("[RoomPage] 미디어 자동 초기화 시작");
+        try {
+          await initializeMedia();
+          console.log("[RoomPage] 미디어 초기화 완료");
+        } catch (mediaError) {
+          console.warn("[RoomPage] 미디어 초기화 실패, 시청자 모드로 전환:", mediaError);
+          // 미디어 초기화 실패 시 자동으로 시청자 모드로 전환
+          setParticipationMode("viewer");
+        }
+      } else {
+        console.log("[RoomPage] 미디어 초기화 스킵 (시청자 모드)");
+      }
 
       // 닉네임 설정 완료 표시
       setIsNicknameSet(true);

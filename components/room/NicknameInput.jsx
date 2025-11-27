@@ -26,6 +26,7 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasLoadedDefault, setHasLoadedDefault] = useState(false);
+  const [skipMediaInit, setSkipMediaInit] = useState(false); // 카메라/마이크 없이 입장 여부
 
   /**
    * 컴포넌트 마운트 시 세션 스토리지에서 기본 닉네임 로드
@@ -91,10 +92,10 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
         console.log("[NicknameInput] 세션 스토리지 저장 실패, 계속 진행");
       }
 
-      console.log("[NicknameInput] 닉네임 설정 완료:", nickname);
+      console.log(`[NicknameInput] 닉네임 설정 완료: ${nickname}, 미디어 스킵: ${skipMediaInit}`);
 
-      // 부모 컴포넌트에 닉네임 전달
-      onNicknameSet(nickname);
+      // 부모 컴포넌트에 닉네임 및 미디어 스킵 여부 전달
+      onNicknameSet(nickname, skipMediaInit);
     } catch (err) {
       console.error("[NicknameInput] 닉네임 설정 실패:", err);
       setError("닉네임 설정에 실패했습니다. 다시 시도해주세요.");
@@ -161,6 +162,24 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
             <p className="mt-2 text-xs text-gray-500">
               한글, 영문, 숫자, 언더스코어, 공백 사용 가능
             </p>
+          </div>
+
+          {/* 카메라/마이크 없이 입장 체크박스 */}
+          <div className="flex items-center space-x-2 px-1">
+            <input
+              id="skip-media-init"
+              type="checkbox"
+              checked={skipMediaInit}
+              onChange={(e) => setSkipMediaInit(e.target.checked)}
+              disabled={isSubmitting}
+              className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
+            />
+            <label
+              htmlFor="skip-media-init"
+              className={`text-sm ${isSubmitting ? "text-gray-500" : "text-gray-300"} cursor-pointer`}
+            >
+              카메라/마이크 없이 입장 (시청자 모드)
+            </label>
           </div>
 
           {/* 제출 버튼 */}
