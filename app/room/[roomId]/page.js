@@ -77,9 +77,9 @@ export default function RoomPage() {
       // 닉네임 설정 완료 표시
       setIsNicknameSet(true);
 
-      // 즉시 방 참가
+      // 즉시 방 참가 (닉네임을 직접 전달하여 closure 문제 해결)
       console.log("[RoomPage] 방 입장 시작");
-      await joinRoom(roomId);
+      await joinRoom(roomId, nickname);
       console.log("[RoomPage] 방 참가 완료");
     } catch (error) {
       console.error("[RoomPage] 방 참가 실패:", error);
