@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import { useWebRTCSignaling } from "./useWebRTCSignaling";
 
 /**
  * useWebRTC 커스텀 훅
@@ -428,113 +429,18 @@ function useWebRTC() {
     [tryStartConnection]
   );
 
-  /**
-   * Offer 수신 이벤트 핸들러
-   */
-  const handleOffer = useCallback(
-    (data) => {
-      const { from, signal } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] WebRTC Offer <- ${senderNickname}`);
-
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 Offer입니다. 무시");
-        return;
-      }
-
-      if (!localStreamRef.current) {
-        console.log("로컬 스트림이 아직 준비되지 않았습니다. Offer를 대기열에 저장");
-        setPendingOffer(data);
-        return;
-      }
-
-      const isReady = webrtcInitState.status === "ready";
-      const isInitializing = webrtcInitState.status === "initializing";
-
-      if (isReady) {
-        const peer = webrtcServiceRef.current.peer;
-        const signalingState = peer?._pc?.signalingState;
-        console.log(`이미 초기화됨 (상태: ${signalingState}), Offer 시그널 처리`);
-
-        // stable 상태에서만 offer 처리 (재협상)
-        if (signalingState === "stable") {
-          handleSignal(signal);
-        } else {
-          console.log(`Offer 무시 (현재 상태: ${signalingState})`);
-        }
-        return;
-      }
-
-      if (isInitializing) {
-        console.log("초기화 진행 중, Offer 무시");
-        return;
-      }
-
-      initializeWebRTC(false, from);
-
-      const checkPeerReady = setInterval(() => {
-        if (webrtcServiceRef.current.peer && !webrtcServiceRef.current.peer.destroyed) {
-          clearInterval(checkPeerReady);
-          console.log("Peer 준비 완료, Offer 처리");
-          handleSignal(signal);
-        }
-      }, 10);
-
-      setTimeout(() => clearInterval(checkPeerReady), 1000);
-    },
-    [initializeWebRTC, handleSignal, webrtcInitState.status, setPendingOffer]
-  );
-
-  /**
-   * Answer 수신 이벤트 핸들러
-   */
-  const handleAnswer = useCallback(
-    (data) => {
-      const { from } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] WebRTC Answer <- ${senderNickname}`);
-
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 Answer입니다. 무시");
-        return;
-      }
-
-      const peer = webrtcServiceRef.current.peer;
-      const signalingState = peer?._pc?.signalingState;
-      console.log(`Answer 처리 시도 (현재 상태: ${signalingState})`);
-
-      // have-local-offer 상태가 아니면 Answer 무시 (중복 처리 방지)
-      if (signalingState !== "have-local-offer") {
-        console.log(`Answer 무시: 현재 상태가 have-local-offer가 아님 (${signalingState})`);
-        return;
-      }
-
-      handleSignal(data.signal);
-    },
-    [handleSignal]
-  );
-
-  /**
-   * ICE candidate 수신 이벤트 핸들러
-   */
-  const handleIceCandidate = useCallback(
-    (data) => {
-      const { from } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] ICE Candidate <- ${senderNickname}`);
-
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 ICE candidate입니다. 무시");
-        return;
-      }
-
-      handleSignal(data.candidate);
-    },
-    [handleSignal]
-  );
+  // ========== 시그널링 핸들러 (useWebRTCSignaling으로 분리됨) ==========
+  const { handleOffer, handleAnswer, handleIceCandidate } = useWebRTCSignaling({
+    socketServiceRef,
+    webrtcServiceRef,
+    localStreamRef,
+    nicknameRef,
+    participantNicknamesRef,
+    webrtcInitState,
+    setPendingOffer,
+    initializeWebRTC,
+    handleSignal,
+  });
 
   /**
    * media:reconnecting 수신 이벤트 핸들러
