@@ -113,7 +113,8 @@ class SocketService {
    */
   emit(event, data) {
     if (!this.socket) {
-      console.error("Socket이 연결되지 않았습니다.");
+      // Socket이 이미 정리된 상태 (정상적인 cleanup 프로세스)
+      console.warn(`[SocketService] Socket이 정리되어 이벤트를 전송할 수 없습니다: ${event}`);
       return;
     }
 
@@ -130,7 +131,10 @@ class SocketService {
    */
   on(event, handler) {
     if (!this.socket) {
-      console.error("Socket이 연결되지 않았습니다.");
+      // Socket이 이미 정리된 상태 (정상적인 cleanup 프로세스)
+      console.warn(
+        `[SocketService] Socket이 정리되어 이벤트 리스너를 등록할 수 없습니다: ${event}`
+      );
       return;
     }
 
@@ -161,7 +165,23 @@ class SocketService {
    */
   off(event, handler) {
     if (!this.socket) {
-      console.error("Socket이 연결되지 않았습니다.");
+      // Socket이 이미 정리된 상태 (정상적인 cleanup 프로세스)
+      console.warn(
+        `[SocketService] Socket이 정리되어 이벤트 리스너를 제거할 수 없습니다: ${event}`
+      );
+
+      // Socket이 없어도 handlerMap은 정리 (메모리 누수 방지)
+      if (handler) {
+        const key = `${event}:${handler}`;
+        this.handlerMap.delete(key);
+      } else {
+        // 핸들러가 없으면 해당 이벤트의 모든 핸들러를 Map에서 제거
+        for (const key of this.handlerMap.keys()) {
+          if (key.startsWith(`${event}:`)) {
+            this.handlerMap.delete(key);
+          }
+        }
+      }
       return;
     }
 

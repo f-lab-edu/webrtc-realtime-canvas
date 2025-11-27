@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { useRoomContext } from "./RoomContext";
-import ChatService from "@/services/ChatService";
 import logger from "@/lib/logger";
+import ChatService from "@/services/ChatService";
+import { useRoomContext } from "./RoomContext";
 
 /**
  * ChatContext
@@ -108,8 +108,14 @@ export function ChatProvider({ children }) {
     return () => {
       logger.info("CHAT", "Socket 이벤트 리스너 제거");
       console.log("[ChatContext] Socket 이벤트 리스너 제거");
-      socketService.off("chat:message", handleChatMessage);
-      socketService.off("chat:error", handleChatError);
+
+      // Socket이 정리되지 않은 경우에만 이벤트 리스너 제거
+      if (socketService?.socket) {
+        socketService.off("chat:message", handleChatMessage);
+        socketService.off("chat:error", handleChatError);
+      } else {
+        console.log("[ChatContext] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
+      }
     };
   }, [socketService, isConnected, nickname]);
 
