@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import ChatPanel from "@/components/chat/ChatPanel";
 import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
-import DeviceSelector from "@/components/room/DeviceSelector";
 import NicknameInput from "@/components/room/NicknameInput";
+import SettingsPanel from "@/components/room/SettingsPanel";
 import VideoStack from "@/components/room/VideoStack";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
@@ -32,13 +32,14 @@ export default function RoomPage() {
   const router = useRouter();
 
   // Context 및 Hooks
-  const { joinRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
+  const { joinRoom, leaveRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
   const {
     localStream,
     remoteStream,
     isVideoEnabled,
-    getAvailableDevices,
-    initializeMediaWithDevice,
+    setParticipationMode,
+    initializeMedia,
+    cleanupMedia,
   } = useMediaContext();
   useWebRTC(); // WebRTC 연결 관리
 
@@ -59,64 +60,73 @@ export default function RoomPage() {
     });
   }, [remoteStream]);
 
-  // 디바이스 선택 완료 상태
-  const [isDeviceSelected, setIsDeviceSelected] = useState(false);
-
   // 디버그 패널 표시 상태
   const [showDebug, setShowDebug] = useState(true);
 
   // URL 복사 성공 상태
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // 설정 패널 표시 상태
+  const [showSettings, setShowSettings] = useState(false);
+
   /**
    * 닉네임 설정 완료 핸들러
-   * 닉네임 설정 후 디바이스 선택 단계로 진행
+   * 닉네임 설정 후 즉시 방 입장 (Optional Media 지원)
+   *
+   * @param {string} nickname - 사용자 닉네임
+   * @param {boolean} skipMediaInit - 카메라/마이크 없이 입장 여부 (기본값: false)
    */
-  const handleNicknameSet = (nickname) => {
-    console.log("[RoomPage] 닉네임 설정 완료:", nickname);
-    setNickname(nickname); // RoomContext에 닉네임 설정
-    setIsNicknameSet(true);
-
-    // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
-    saveNicknameToSession(nickname);
-  };
-
-  /**
-   * 디바이스 선택 완료 후 방 입장
-   */
-  const handleDeviceSelected = async () => {
+  const handleNicknameSet = async (nickname, skipMediaInit = false) => {
     try {
-      console.log("[RoomPage] 디바이스 선택 완료, 방 입장 시작");
-      setIsDeviceSelected(true);
+      console.log(`[RoomPage] 닉네임 설정 완료: ${nickname}, 미디어 스킵: ${skipMediaInit}`);
+      setNickname(nickname); // RoomContext에 닉네임 설정
 
-      // 방 참가
-      await joinRoom(roomId);
+      // participationMode 설정 (시청자 vs 일반 참여자)
+      if (skipMediaInit) {
+        console.log("[RoomPage] 시청자 모드로 설정");
+        setParticipationMode("viewer");
+      } else {
+        console.log("[RoomPage] 일반 참여자 모드로 설정");
+        setParticipationMode("participant");
+      }
+
+      // 세션 스토리지에 닉네임 저장 (하이브리드 방식)
+      saveNicknameToSession(nickname);
+
+      // 미디어 초기화 (체크박스 미체크 시에만)
+      if (!skipMediaInit) {
+        console.log("[RoomPage] 미디어 자동 초기화 시작");
+        try {
+          await initializeMedia();
+          console.log("[RoomPage] 미디어 초기화 완료");
+        } catch (mediaError) {
+          console.warn("[RoomPage] 미디어 초기화 실패, 시청자 모드로 전환:", mediaError);
+          // 미디어 초기화 실패 시 자동으로 시청자 모드로 전환
+          setParticipationMode("viewer");
+        }
+      } else {
+        console.log("[RoomPage] 미디어 초기화 스킵 (시청자 모드)");
+      }
+
+      // 닉네임 설정 완료 표시
+      setIsNicknameSet(true);
+
+      // 즉시 방 참가 (닉네임을 직접 전달하여 closure 문제 해결)
+      console.log("[RoomPage] 방 입장 시작");
+      await joinRoom(roomId, nickname);
       console.log("[RoomPage] 방 참가 완료");
     } catch (error) {
       console.error("[RoomPage] 방 참가 실패:", error);
       alert("방 참가에 실패했습니다. 다시 시도해주세요.");
-      setIsDeviceSelected(false);
+      setIsNicknameSet(false);
     }
   };
 
   /**
-   * 닉네임 입력 화면 표시 (첫 번째 단계)
+   * 닉네임 입력 화면 표시
    */
   if (!isNicknameSet) {
     return <NicknameInput onNicknameSet={handleNicknameSet} roomId={roomId} />;
-  }
-
-  /**
-   * 디바이스 선택 화면 표시 (두 번째 단계)
-   */
-  if (!isDeviceSelected) {
-    return (
-      <DeviceSelector
-        onDeviceSelected={handleDeviceSelected}
-        getAvailableDevices={getAvailableDevices}
-        initializeMediaWithDevice={initializeMediaWithDevice}
-      />
-    );
   }
 
   /**
@@ -138,6 +148,29 @@ export default function RoomPage() {
     }
   };
 
+  /**
+   * 홈으로 돌아가기 핸들러
+   * 미디어 리소스 정리 후 방 퇴장
+   */
+  const handleGoHome = () => {
+    try {
+      console.log("[RoomPage] 홈으로 돌아가기: 리소스 정리 시작");
+
+      // 1. 미디어 리소스 정리 (WebRTC Peer 포함)
+      cleanupMedia();
+
+      // 2. 방 퇴장 (Socket 정리)
+      leaveRoom();
+
+      // 3. 홈으로 이동
+      router.push("/");
+    } catch (error) {
+      console.error("[RoomPage] 홈 이동 중 에러:", error);
+      // 에러가 있어도 홈으로 이동
+      router.push("/");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-950">
       {/* 상단 헤더 */}
@@ -149,7 +182,7 @@ export default function RoomPage() {
 
         <div className="flex items-center gap-2">
           <Button
-            onClick={() => router.push("/")}
+            onClick={handleGoHome}
             variant="outline"
             size="sm"
             className="text-white h-8"
@@ -225,7 +258,10 @@ export default function RoomPage() {
       </div>
 
       {/* 하단 컨트롤 바 */}
-      <ControlBar />
+      <ControlBar onSettingsClick={() => setShowSettings(true)} />
+
+      {/* 설정 패널 */}
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* 오디오 디버그 패널 (개발 중에만 표시) */}
       {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}

@@ -145,12 +145,16 @@ export function RoomProvider({ children }) {
   /**
    * 방 참가
    * @param {string} targetRoomId - 참가할 방 ID
+   * @param {string} nicknameParam - 참가 시 사용할 닉네임 (선택)
    * @returns {Promise<void>}
    */
   const joinRoom = useCallback(
-    async (targetRoomId) => {
+    async (targetRoomId, nicknameParam = null) => {
       try {
         const socketService = socketServiceRef.current;
+
+        // 파라미터로 전달된 닉네임을 우선 사용 (closure 문제 해결)
+        const effectiveNickname = nicknameParam || nickname || null;
 
         // 이미 같은 방에 연결되어 있으면 무시
         if (roomId === targetRoomId && socketService.isSocketConnected()) {
@@ -159,7 +163,7 @@ export function RoomProvider({ children }) {
         }
 
         setConnectionState("connecting");
-        console.log("방 참가 시도:", targetRoomId);
+        console.log(`방 참가 시도: ${targetRoomId}, 닉네임: ${effectiveNickname || "없음"}`);
 
         const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 
@@ -167,14 +171,14 @@ export function RoomProvider({ children }) {
         await socketService.connect(serverUrl);
 
         // Socket 이벤트 리스너 등록
-        setupSocketListeners(socketService, targetRoomId, nickname);
+        setupSocketListeners(socketService, targetRoomId, effectiveNickname);
 
         // 방 참가 요청 (닉네임 포함)
         socketService.emit("room:join", {
           roomId: targetRoomId,
-          nickname: nickname || null,
+          nickname: effectiveNickname,
         });
-        console.log("방 참가 요청 전송, 닉네임:", nickname || "없음");
+        console.log(`방 참가 요청 전송, 닉네임: ${effectiveNickname || "없음"}`);
 
         setRoomId(targetRoomId);
       } catch (error) {

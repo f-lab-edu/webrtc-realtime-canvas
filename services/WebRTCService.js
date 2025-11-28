@@ -20,18 +20,83 @@ class WebRTCService {
       close: null,
       connect: null,
     };
+
+    // 재연결 메커니즘을 위한 속성
+    this.socketService = null; // 소켓 서비스 인스턴스
+    this.targetSocketId = null; // 대상 소켓 ID
+    this.isReconnecting = false; // 재연결 진행 중 플래그
+  }
+
+  /**
+   * 재연결 설정
+   * 디바이스 변경 시 재연결을 위해 socketService와 targetSocketId를 설정
+   *
+   * @param {Object} socketService - SocketService 인스턴스
+   * @param {string} targetSocketId - 대상 소켓 ID
+   * @param {boolean} isReconnecting - 재연결 진행 중 플래그
+   */
+  setReconnectionConfig(socketService, targetSocketId, isReconnecting = true) {
+    this.socketService = socketService;
+    this.targetSocketId = targetSocketId;
+    this.isReconnecting = isReconnecting;
+
+    console.log(`[WebRTCService] 재연결 설정 완료`);
+    console.log(`   - targetSocketId: ${targetSocketId}`);
+    console.log(`   - isReconnecting: ${isReconnecting}`);
+  }
+
+  /**
+   * 재연결 플래그 초기화
+   */
+  clearReconnectionFlag() {
+    this.isReconnecting = false;
+    console.log(`[WebRTCService] 재연결 플래그 초기화`);
+  }
+
+  /**
+   * 재연결 완료 처리
+   * Peer 연결 성공 시 호출되며, 재연결 중이면 media:reconnected 이벤트 emit
+   */
+  handleReconnectionComplete() {
+    if (this.isReconnecting && this.socketService && this.targetSocketId) {
+      console.log(`\n========== [WebRTCService] 재연결 완료 알림 ==========`);
+      console.log(`⏰ 타임스탬프: ${new Date().toISOString()}`);
+      console.log(`📡 media:reconnected 이벤트 emit`);
+      console.log(`   - 대상: ${this.targetSocketId}`);
+
+      try {
+        this.socketService.emit("media:reconnected", {
+          to: this.targetSocketId,
+        });
+        console.log(`✅ media:reconnected 이벤트 전송 완료`);
+      } catch (error) {
+        console.error(`❌ media:reconnected 이벤트 전송 실패:`, error);
+      }
+
+      // 재연결 플래그 초기화
+      this.isReconnecting = false;
+
+      console.log(`========== [WebRTCService] 재연결 완료 알림 종료 ==========\n`);
+    }
   }
 
   /**
    * SimplePeer 인스턴스 초기화
    * @param {boolean} initiator - offer를 생성하는 측인지 여부
-   * @param {MediaStream} stream - 로컬 미디어 스트림
+   * @param {MediaStream|null} stream - 로컬 미디어 스트림 (optional, 시청자 모드면 null 가능)
    * @param {Object} config - STUN/TURN 서버 설정 (선택적)
    */
   initialize(initiator, stream, config = {}) {
     try {
       this.isInitiator = initiator;
-      this.localStream = stream;
+
+      // stream이 null이면 빈 MediaStream 생성 (시청자 모드 지원)
+      if (!stream) {
+        console.log("⚠️ [WebRTCService] stream이 null, 빈 MediaStream 생성 (시청자 모드)");
+        this.localStream = new MediaStream();
+      } else {
+        this.localStream = stream;
+      }
 
       // 환경 변수에서 STUN/TURN 서버 설정 가져오기
       const iceServers = [];
@@ -67,9 +132,11 @@ class WebRTCService {
       };
 
       // 로컬 스트림 트랙 확인
-      const audioTracks = stream.getAudioTracks();
-      const videoTracks = stream.getVideoTracks();
-      console.log(`WebRTC 초기화 - 로컬 스트림 트랙:`);
+      const audioTracks = this.localStream.getAudioTracks();
+      const videoTracks = this.localStream.getVideoTracks();
+      const hasStream = stream !== null;
+
+      console.log(`WebRTC 초기화 - 로컬 스트림 트랙 (hasStream: ${hasStream}):`);
       console.log(
         `- 비디오: ${videoTracks.length}개`,
         videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
@@ -79,13 +146,17 @@ class WebRTCService {
         audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
       );
 
+      if (!hasStream) {
+        console.log("ℹ️ [WebRTCService] 시청자 모드로 WebRTC 연결 시작 (빈 스트림)");
+      }
+
       // 개발 환경 체크
       const isDevelopment = process.env.NODE_ENV === "development";
 
       // SimplePeer 인스턴스 생성
       this.peer = new SimplePeer({
         initiator,
-        stream,
+        stream: this.localStream, // 빈 MediaStream 또는 실제 스트림
         // 개발 환경: trickle false (안정성 우선)
         // 프로덕션: trickle true (성능 우선)
         trickle: !isDevelopment,
@@ -105,9 +176,7 @@ class WebRTCService {
 
         // 첫 signal 이벤트 시 _pc 모니터링 설정
         if (!isMonitoringSetup && this.peer._pc) {
-          console.log(
-            "🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작"
-          );
+          console.log("🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작");
 
           // ICE Connection State 모니터링
           this.peer._pc.oniceconnectionstatechange = () => {
@@ -127,11 +196,12 @@ class WebRTCService {
             if (state === "connected") {
               console.log("✅ Peer Connection Established");
 
+              // 재연결 완료 처리 (media:reconnected 이벤트 emit)
+              this.handleReconnectionComplete();
+
               // RTCPeerConnection이 connected 상태가 되면
               // peer.on('connect')와 동일하게 처리 (이중 안전장치)
-              console.log(
-                "🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출"
-              );
+              console.log("🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출");
 
               if (this.handlers.connect) {
                 this.handlers.connect();
@@ -230,6 +300,10 @@ class WebRTCService {
         // SimplePeer는 video/audio 전용 연결에서 peer.on('connect') 이벤트를 발생시키지 않음
         // (connect 이벤트는 data channel이 있을 때만 발생)
         console.log(`🎬 [WebRTCService] peer.on('stream') 수신 = P2P 연결 완료`);
+
+        // 재연결 완료 처리 (media:reconnected 이벤트 emit)
+        this.handleReconnectionComplete();
+
         if (this.handlers.connect) {
           console.log(`✅ [WebRTCService] connect 핸들러 호출 (stream 기반)`);
           this.handlers.connect();
@@ -241,6 +315,10 @@ class WebRTCService {
       // 연결 성공 이벤트
       this.peer.on("connect", () => {
         console.log("WebRTC P2P 연결 성공");
+
+        // 재연결 완료 처리 (media:reconnected 이벤트 emit)
+        this.handleReconnectionComplete();
+
         if (this.handlers.connect) {
           this.handlers.connect();
         }
@@ -366,6 +444,11 @@ class WebRTCService {
         close: null,
         connect: null,
       };
+
+      // 재연결 관련 속성 초기화
+      this.socketService = null;
+      this.targetSocketId = null;
+      this.isReconnecting = false;
     } catch (error) {
       console.error("WebRTC 종료 에러:", error);
     }

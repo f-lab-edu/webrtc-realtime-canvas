@@ -37,18 +37,26 @@ export default function WhiteboardCanvas() {
       height,
     });
 
-    // 윈도우 리사이즈 이벤트 핸들러
-    const handleResize = () => {
-      const newWidth = container.clientWidth;
-      const newHeight = container.clientHeight;
-      setCanvasSize(newWidth, newHeight);
-    };
+    // ResizeObserver로 container 크기 변화 감지
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // contentRect는 padding을 제외한 실제 콘텐츠 영역
+        const { width: newWidth, height: newHeight } = entry.contentRect;
 
-    window.addEventListener("resize", handleResize);
+        // 크기가 실제로 변경된 경우에만 업데이트 (0보다 큰 값만)
+        if (newWidth > 0 && newHeight > 0) {
+          console.log(`[WhiteboardCanvas] 컨테이너 크기 변경 감지: ${newWidth}x${newHeight}`);
+          setCanvasSize(newWidth, newHeight);
+        }
+      }
+    });
 
-    // 클린업 함수
+    // container 관찰 시작
+    resizeObserver.observe(container);
+
+    // 클린업 함수: ResizeObserver 연결 해제
     return () => {
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
     };
   }, [initializeWhiteboard, setCanvasSize]); // 의존성 배열에 함수 추가
 

@@ -8,8 +8,11 @@ import { useRoomContext } from "@/contexts/RoomContext";
 /**
  * ControlBar 컴포넌트
  * 비디오/오디오 제어, 화면 공유, 통화 종료 버튼을 제공
+ *
+ * Props:
+ * - onSettingsClick: 설정 버튼 클릭 시 호출될 콜백 함수
  */
-export default function ControlBar() {
+export default function ControlBar({ onSettingsClick }) {
   const router = useRouter();
   const { leaveRoom } = useRoomContext();
   const {
@@ -20,15 +23,30 @@ export default function ControlBar() {
     toggleAudio,
     startScreenShare,
     stopScreenShare,
+    cleanupMedia,
   } = useMediaContext();
 
   /**
    * 통화 종료 핸들러
+   * 미디어 리소스 정리 후 방 퇴장
    */
   const handleEndCall = () => {
-    console.log("통화 종료");
-    leaveRoom();
-    router.push("/");
+    try {
+      console.log("[ControlBar] 통화 종료: 리소스 정리 시작");
+
+      // 1. 미디어 리소스 정리 (WebRTC Peer 포함)
+      cleanupMedia();
+
+      // 2. 방 퇴장 (Socket 정리)
+      leaveRoom();
+
+      // 3. 홈으로 이동
+      router.push("/");
+    } catch (error) {
+      console.error("[ControlBar] 통화 종료 중 에러:", error);
+      // 에러가 있어도 홈으로 이동
+      router.push("/");
+    }
   };
 
   /**
@@ -80,6 +98,19 @@ export default function ControlBar() {
       >
         <span className="text-xl">{isScreenSharing ? "🖥️✓" : "🖥️"}</span>
       </Button>
+
+      {/* 설정 버튼 */}
+      {onSettingsClick && (
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={onSettingsClick}
+          className="w-14 h-14 rounded-full"
+          title="디바이스 설정"
+        >
+          <span className="text-xl">⚙️</span>
+        </Button>
+      )}
 
       {/* 통화 종료 버튼 */}
       <Button

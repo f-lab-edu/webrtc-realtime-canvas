@@ -294,7 +294,13 @@ export function WhiteboardProvider({ children }) {
     // 클린업 함수
     return () => {
       console.log("[WhiteboardProvider] 이벤트 리스너 제거");
-      socketService.off("whiteboard:event", handleWhiteboardEvent);
+
+      // Socket이 정리되지 않은 경우에만 이벤트 리스너 제거
+      if (socketService?.socket) {
+        socketService.off("whiteboard:event", handleWhiteboardEvent);
+      } else {
+        console.log("[WhiteboardProvider] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
+      }
     };
   }, [socketService, socketService?.socket, isInitialized, applyRemoteEvent]);
 

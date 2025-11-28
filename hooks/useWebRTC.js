@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaContext } from "@/contexts/MediaContext";
 import { useRoomContext } from "@/contexts/RoomContext";
+import { useWebRTCReconnection } from "./useWebRTCReconnection";
+import { useWebRTCSignaling } from "./useWebRTCSignaling";
 
 /**
  * useWebRTC 커스텀 훅
@@ -11,19 +13,44 @@ import { useRoomContext } from "@/contexts/RoomContext";
 function useWebRTC() {
   // Context에서 필요한 값 가져오기
   const { socketService, roomId, participants, nickname, participantNicknames } = useRoomContext();
-  const { webrtcService, localStream, setRemoteStream } = useMediaContext();
+  const {
+    webrtcService,
+    localStream,
+    setRemoteStream,
+    participationMode,
+    setReconnectMediaCallback,
+    webrtcReconnectionState,
+    startWebRTCReconnection,
+    completeWebRTCReconnection,
+    startRemoteWebRTCReconnection,
+    setTargetSocketId,
+    resetWebRTCReconnectionState,
+    webrtcInitState,
+    startWebRTCInitialization,
+    completeWebRTCInitialization,
+    setWebRTCInitializationError,
+    resetWebRTCInitState,
+    setSignalProcessing,
+    setPendingOffer,
+    setPendingConnection,
+  } = useMediaContext();
 
   // WebRTC 연결 상태
   const [connectionState, setConnectionState] = useState("disconnected");
   const [isInitiator, setIsInitiator] = useState(false);
 
-  // 중복 실행 방지를 위한 ref
-  const isProcessingSignalRef = useRef(false);
-  const hasInitializedRef = useRef(false);
-  const isInitializingRef = useRef(false); // 초기화 진행 중 플래그
-  const pendingOfferRef = useRef(null);
-  const pendingConnectionRef = useRef(null); // 대기 중인 연결 정보 저장 (localStream 준비 대기)
-  const targetSocketIdRef = useRef(null); // 연결 대상 소켓 ID 저장
+  // 모든 초기화 관련 ref는 MediaContext의 webrtcInitState로 대체됨
+  // - hasInitialized → webrtcInitState.status === 'ready'
+  // - isInitializing → webrtcInitState.status === 'initializing'
+  // - isProcessingSignal → webrtcInitState.isProcessingSignal
+  // - pendingOffer → webrtcInitState.pendingOffer
+  // - pendingConnection → webrtcInitState.pendingConnection
+
+  // 재연결 관련 ref는 MediaContext의 webrtcReconnectionState로 대체됨
+  // - targetSocketId → webrtcReconnectionState.targetSocketId
+  // - isReconnecting → webrtcReconnectionState.isReconnecting
+  // - isRemoteReconnecting → webrtcReconnectionState.isRemoteReconnecting
+  // - reconnectTimeout → webrtcReconnectionState.reconnectTimeout
 
   // 최신 값을 참조하기 위한 ref
   const localStreamRef = useRef(localStream);
@@ -32,6 +59,7 @@ function useWebRTC() {
   const setRemoteStreamRef = useRef(setRemoteStream);
   const nicknameRef = useRef(nickname);
   const participantNicknamesRef = useRef(participantNicknames);
+  const participationModeRef = useRef(participationMode);
 
   // ref 업데이트
   useEffect(() => {
@@ -41,7 +69,16 @@ function useWebRTC() {
     setRemoteStreamRef.current = setRemoteStream;
     nicknameRef.current = nickname;
     participantNicknamesRef.current = participantNicknames;
-  }, [localStream, socketService, webrtcService, setRemoteStream, nickname, participantNicknames]);
+    participationModeRef.current = participationMode;
+  }, [
+    localStream,
+    socketService,
+    webrtcService,
+    setRemoteStream,
+    nickname,
+    participantNicknames,
+    participationMode,
+  ]);
 
   /**
    * WebRTC 연결 초기화
@@ -69,12 +106,13 @@ function useWebRTC() {
         return;
       }
 
-      if (hasInitializedRef.current) {
+      // 상태 머신 체크
+      if (webrtcInitState.status === "ready") {
         console.log("WebRTC가 이미 초기화되었습니다.");
         return;
       }
 
-      if (isInitializingRef.current) {
+      if (webrtcInitState.status === "initializing") {
         console.log("WebRTC 초기화가 이미 진행 중입니다.");
         return;
       }
@@ -93,22 +131,23 @@ function useWebRTC() {
             `  - 대상 소켓: ${targetSocketId}\n` +
             `  - 타임스탬프: ${new Date().toISOString()}`
         );
-        isInitializingRef.current = true;
+
+        // MediaContext 함수로 초기화 시작
+        startWebRTCInitialization();
         setIsInitiator(initiator);
         setConnectionState("connecting");
-        targetSocketIdRef.current = targetSocketId;
+        setTargetSocketId(targetSocketId); // MediaContext 함수 사용
 
         // 핸들러를 initialize() 전에 등록
         console.log("🎯 [useWebRTC] 핸들러 등록 (initialize 전)");
 
         // 1. 시그널 이벤트 핸들러 - 먼저 등록!
         webrtcServiceRef.current.onSignal((signal) => {
-          if (!socketServiceRef.current || !targetSocketIdRef.current) {
+          // targetSocketId는 initializeWebRTC의 파라미터 값 사용 (closure로 캡처됨)
+          if (!socketServiceRef.current || !targetSocketId) {
             console.error("SocketService 또는 대상 소켓 ID가 없습니다.");
             return;
           }
-
-          const targetSocketId = targetSocketIdRef.current;
           const myNickname = nicknameRef.current || "알 수 없음";
           const targetNickname =
             participantNicknamesRef.current.get(targetSocketId) || "알 수 없음";
@@ -201,8 +240,9 @@ function useWebRTC() {
         console.log("🚀 [useWebRTC] WebRTC 초기화 시작 (핸들러 등록 완료)");
         webrtcServiceRef.current.initialize(initiator, localStreamRef.current);
 
-        hasInitializedRef.current = true;
-        isInitializingRef.current = false;
+        // MediaContext 함수로 초기화 완료
+        completeWebRTCInitialization();
+
         console.log(
           `[initializeWebRTC] ✅ WebRTC 초기화 완료\n` +
             `  - Peer 상태: 활성\n` +
@@ -216,25 +256,35 @@ function useWebRTC() {
             `  - Stack: ${error.stack}`
         );
         setConnectionState("disconnected");
-        isInitializingRef.current = false;
+        setWebRTCInitializationError(error.message);
       }
     },
-    [setRemoteStream]
+    [
+      setRemoteStream,
+      setTargetSocketId,
+      webrtcInitState.status,
+      startWebRTCInitialization,
+      completeWebRTCInitialization,
+      setWebRTCInitializationError,
+    ]
   );
 
   /**
    * 연결 시작 시도 함수
-   * localStream이 준비되지 않았으면 대기열에 추가, 준비되었으면 즉시 연결 시작
+   * localStream이 준비되지 않았으면 participationMode 체크 후 처리
    */
   const tryStartConnection = useCallback(
     (targetSocketId, asInitiator) => {
       const mySocketId = socketServiceRef.current?.socket?.id;
       const role = asInitiator ? "발신자(Offer 생성)" : "수신자(Answer 생성)";
+      const currentMode = participationModeRef.current;
+
       console.log(
         `[tryStartConnection] 연결 시도\n` +
           `  - 내 소켓: ${mySocketId}\n` +
           `  - 대상 소켓: ${targetSocketId}\n` +
-          `  - 역할: ${role} (initiator: ${asInitiator})`
+          `  - 역할: ${role} (initiator: ${asInitiator})\n` +
+          `  - 참여 모드: ${currentMode}`
       );
 
       // 자기 자신인지 확인
@@ -243,22 +293,36 @@ function useWebRTC() {
         return false;
       }
 
-      // localStream이 준비되지 않았으면 대기열에 추가
+      // localStream이 준비되지 않았으면 participationMode 체크
       if (!localStreamRef.current) {
+        // 시청자 모드면 빈 스트림으로 연결
+        if (currentMode === "viewer") {
+          console.log(
+            `[tryStartConnection] ✅ 시청자 모드, 빈 스트림으로 WebRTC 연결 시작\n` +
+              `  - 대상: ${targetSocketId}`
+          );
+          // localStream을 null로 전달 (WebRTCService가 빈 MediaStream 생성)
+          initializeWebRTC(asInitiator, targetSocketId);
+          return true;
+        }
+
+        // 일반 참여자 모드면 대기열에 추가
         console.log(
           `[tryStartConnection] ⏳ 로컬 스트림 대기 중, 연결 대기열에 추가\n` +
             `  - 대기 정보: { target: ${targetSocketId}, initiator: ${asInitiator} }`
         );
-        pendingConnectionRef.current = { targetSocketId, asInitiator };
+        setPendingConnection({ targetSocketId, asInitiator });
         return false;
       }
 
       // 이미 초기화되었거나 초기화 중이면 무시
-      if (hasInitializedRef.current || isInitializingRef.current) {
+      const isReady = webrtcInitState.status === "ready";
+      const isInitializing = webrtcInitState.status === "initializing";
+
+      if (isReady || isInitializing) {
         console.log(
           `[tryStartConnection] ⚠️ 이미 WebRTC 연결이 있거나 초기화 중입니다.\n` +
-            `  - hasInitialized: ${hasInitializedRef.current}\n` +
-            `  - isInitializing: ${isInitializingRef.current}`
+            `  - status: ${webrtcInitState.status}`
         );
         return false;
       }
@@ -272,59 +336,62 @@ function useWebRTC() {
       initializeWebRTC(asInitiator, targetSocketId);
       return true;
     },
-    [initializeWebRTC]
+    [initializeWebRTC, webrtcInitState.status, setPendingConnection]
   );
 
   /**
    * 시그널 데이터 처리
    */
-  const handleSignal = useCallback((signalData) => {
-    if (isProcessingSignalRef.current) {
-      console.log("시그널 처리 중입니다. 대기 중...");
-      return;
-    }
-
-    if (!webrtcServiceRef.current.peer || webrtcServiceRef.current.peer.destroyed) {
-      console.log("Peer가 없거나 종료된 상태입니다. 시그널 무시");
-      return;
-    }
-
-    // 시그널링 상태 확인
-    const peer = webrtcServiceRef.current.peer;
-    const signalingState = peer._pc?.signalingState;
-
-    if (signalData.type === "offer" && signalingState === "stable") {
-      console.log("Stable 상태에서 Offer 수신, 재협상 시작");
-    } else if (signalData.type === "answer") {
-      // Answer 시그널 처리 시 signalingState 재확인 (이중 안전장치)
-      if (signalingState !== "have-local-offer") {
-        console.log(
-          `[handleSignal] Answer 무시: 현재 상태가 have-local-offer가 아님 (${signalingState})`
-        );
+  const handleSignal = useCallback(
+    (signalData) => {
+      if (webrtcInitState.isProcessingSignal) {
+        console.log("시그널 처리 중입니다. 대기 중...");
         return;
       }
-      console.log(`[handleSignal] Answer 처리 진행 (상태: ${signalingState})`);
-    }
 
-    try {
-      isProcessingSignalRef.current = true;
-      webrtcServiceRef.current.signal(signalData);
-      console.log("시그널 처리 완료:", signalData.type || "candidate");
-    } catch (error) {
-      console.error("시그널 처리 에러:", error);
-    } finally {
-      isProcessingSignalRef.current = false;
-    }
-  }, []);
+      if (!webrtcServiceRef.current.peer || webrtcServiceRef.current.peer.destroyed) {
+        console.log("Peer가 없거나 종료된 상태입니다. 시그널 무시");
+        return;
+      }
+
+      // 시그널링 상태 확인
+      const peer = webrtcServiceRef.current.peer;
+      const signalingState = peer._pc?.signalingState;
+
+      if (signalData.type === "offer" && signalingState === "stable") {
+        console.log("Stable 상태에서 Offer 수신, 재협상 시작");
+      } else if (signalData.type === "answer") {
+        // Answer 시그널 처리 시 signalingState 재확인 (이중 안전장치)
+        if (signalingState !== "have-local-offer") {
+          console.log(
+            `[handleSignal] Answer 무시: 현재 상태가 have-local-offer가 아님 (${signalingState})`
+          );
+          return;
+        }
+        console.log(`[handleSignal] Answer 처리 진행 (상태: ${signalingState})`);
+      }
+
+      try {
+        setSignalProcessing(true);
+        webrtcServiceRef.current.signal(signalData);
+        console.log("시그널 처리 완료:", signalData.type || "candidate");
+      } catch (error) {
+        console.error("시그널 처리 에러:", error);
+      } finally {
+        setSignalProcessing(false);
+      }
+    },
+    [webrtcInitState.isProcessingSignal, setSignalProcessing]
+  );
 
   /**
    * localStream이 준비되면 대기 중인 offer 처리
    */
   useEffect(() => {
-    if (localStream && pendingOfferRef.current) {
+    if (localStream && webrtcInitState.pendingOffer) {
       console.log("로컬 스트림 준비 완료, 대기 중인 Offer 처리");
-      const pendingOffer = pendingOfferRef.current;
-      pendingOfferRef.current = null;
+      const pendingOffer = webrtcInitState.pendingOffer;
+      setPendingOffer(null); // 대기열 초기화
 
       const { from, signal } = pendingOffer;
       initializeWebRTC(false, from);
@@ -339,7 +406,7 @@ function useWebRTC() {
 
       setTimeout(() => clearInterval(checkPeerReady), 1000);
     }
-  }, [localStream, initializeWebRTC, handleSignal]);
+  }, [localStream, webrtcInitState.pendingOffer, initializeWebRTC, handleSignal, setPendingOffer]);
 
   /**
    * 새 참가자 입장 이벤트 핸들러
@@ -363,141 +430,36 @@ function useWebRTC() {
     [tryStartConnection]
   );
 
-  /**
-   * Offer 수신 이벤트 핸들러
-   */
-  const handleOffer = useCallback(
-    (data) => {
-      const { from, signal } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] WebRTC Offer <- ${senderNickname}`);
+  // ========== 시그널링 핸들러 (useWebRTCSignaling으로 분리됨) ==========
+  const { handleOffer, handleAnswer, handleIceCandidate } = useWebRTCSignaling({
+    socketServiceRef,
+    webrtcServiceRef,
+    localStreamRef,
+    nicknameRef,
+    participantNicknamesRef,
+    webrtcInitState,
+    setPendingOffer,
+    initializeWebRTC,
+    handleSignal,
+  });
 
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 Offer입니다. 무시");
-        return;
-      }
-
-      if (!localStreamRef.current) {
-        console.log("로컬 스트림이 아직 준비되지 않았습니다. Offer를 대기열에 저장");
-        pendingOfferRef.current = data;
-        return;
-      }
-
-      if (hasInitializedRef.current) {
-        const peer = webrtcServiceRef.current.peer;
-        const signalingState = peer?._pc?.signalingState;
-        console.log(`이미 초기화됨 (상태: ${signalingState}), Offer 시그널 처리`);
-
-        // stable 상태에서만 offer 처리 (재협상)
-        if (signalingState === "stable") {
-          handleSignal(signal);
-        } else {
-          console.log(`Offer 무시 (현재 상태: ${signalingState})`);
-        }
-        return;
-      }
-
-      if (isInitializingRef.current) {
-        console.log("초기화 진행 중, Offer 무시");
-        return;
-      }
-
-      initializeWebRTC(false, from);
-
-      const checkPeerReady = setInterval(() => {
-        if (webrtcServiceRef.current.peer && !webrtcServiceRef.current.peer.destroyed) {
-          clearInterval(checkPeerReady);
-          console.log("Peer 준비 완료, Offer 처리");
-          handleSignal(signal);
-        }
-      }, 10);
-
-      setTimeout(() => clearInterval(checkPeerReady), 1000);
-    },
-    [initializeWebRTC, handleSignal]
-  );
-
-  /**
-   * Answer 수신 이벤트 핸들러
-   */
-  const handleAnswer = useCallback(
-    (data) => {
-      const { from } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] WebRTC Answer <- ${senderNickname}`);
-
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 Answer입니다. 무시");
-        return;
-      }
-
-      const peer = webrtcServiceRef.current.peer;
-      const signalingState = peer?._pc?.signalingState;
-      console.log(`Answer 처리 시도 (현재 상태: ${signalingState})`);
-
-      // have-local-offer 상태가 아니면 Answer 무시 (중복 처리 방지)
-      if (signalingState !== "have-local-offer") {
-        console.log(`Answer 무시: 현재 상태가 have-local-offer가 아님 (${signalingState})`);
-        return;
-      }
-
-      handleSignal(data.signal);
-    },
-    [handleSignal]
-  );
-
-  /**
-   * ICE candidate 수신 이벤트 핸들러
-   */
-  const handleIceCandidate = useCallback(
-    (data) => {
-      const { from } = data;
-      const myNickname = nicknameRef.current || "알 수 없음";
-      const senderNickname = participantNicknamesRef.current.get(from) || "알 수 없음";
-      console.log(`[수신] [${myNickname}] ICE Candidate <- ${senderNickname}`);
-
-      if (socketServiceRef.current.socket?.id === from) {
-        console.log("자기 자신으로부터 온 ICE candidate입니다. 무시");
-        return;
-      }
-
-      handleSignal(data.candidate);
-    },
-    [handleSignal]
-  );
-
-  /**
-   * 참가자 퇴장 이벤트 핸들러
-   */
-  const handleParticipantLeft = useCallback(() => {
-    console.log("참가자 퇴장, WebRTC 연결 강제 종료");
-
-    // 즉시 Peer 파괴
-    const currentPeer = webrtcServiceRef.current.peer;
-    if (currentPeer) {
-      try {
-        if (!currentPeer.destroyed) {
-          currentPeer.destroy();
-          console.log("✅ Peer destroyed");
-        }
-      } catch (error) {
-        console.error("Peer 정리 중 오류:", error);
-      }
-
-      // 명시적으로 null 할당
-      webrtcServiceRef.current.peer = null;
-    }
-
-    setRemoteStreamRef.current(null);
-    setConnectionState("disconnected");
-    hasInitializedRef.current = false;
-    isInitializingRef.current = false;
-    targetSocketIdRef.current = null;
-
-    console.log("✅ WebRTC 연결 정리 완료");
-  }, []);
+  // ========== 재연결 핸들러 (useWebRTCReconnection으로 분리됨) ==========
+  const { reconnectMedia, handleMediaReconnecting, handleMediaReconnected, handleParticipantLeft } =
+    useWebRTCReconnection({
+      socketServiceRef,
+      webrtcServiceRef,
+      localStreamRef,
+      setRemoteStreamRef,
+      isInitiator,
+      setConnectionState,
+      webrtcReconnectionState,
+      startWebRTCReconnection,
+      completeWebRTCReconnection,
+      startRemoteWebRTCReconnection,
+      resetWebRTCReconnectionState,
+      resetWebRTCInitState,
+      initializeWebRTC,
+    });
 
   /**
    * Socket 이벤트 리스너 설정
@@ -516,6 +478,8 @@ function useWebRTC() {
     socketService.on("signal:answer", handleAnswer);
     socketService.on("signal:ice-candidate", handleIceCandidate);
     socketService.on("room:participant-left", handleParticipantLeft);
+    socketService.on("media:reconnecting", handleMediaReconnecting);
+    socketService.on("media:reconnected", handleMediaReconnected);
 
     // 클린업 함수
     return () => {
@@ -525,6 +489,8 @@ function useWebRTC() {
       socketService.off("signal:answer", handleAnswer);
       socketService.off("signal:ice-candidate", handleIceCandidate);
       socketService.off("room:participant-left", handleParticipantLeft);
+      socketService.off("media:reconnecting", handleMediaReconnecting);
+      socketService.off("media:reconnected", handleMediaReconnected);
     };
   }, [
     socketService,
@@ -534,6 +500,8 @@ function useWebRTC() {
     handleAnswer,
     handleIceCandidate,
     handleParticipantLeft,
+    handleMediaReconnecting,
+    handleMediaReconnected,
   ]);
 
   /**
@@ -562,21 +530,28 @@ function useWebRTC() {
    * localStream 준비 시 대기 중인 연결 처리
    */
   useEffect(() => {
-    if (localStream && pendingConnectionRef.current) {
-      const { targetSocketId, asInitiator } = pendingConnectionRef.current;
+    if (localStream && webrtcInitState.pendingConnection) {
+      const { targetSocketId, asInitiator } = webrtcInitState.pendingConnection;
       console.log(
         `[useWebRTC] 로컬 스트림 준비 완료, 대기 중인 연결 시작 (target: ${targetSocketId})`
       );
 
       // 대기열 초기화
-      pendingConnectionRef.current = null;
+      setPendingConnection(null);
 
       // 아직 초기화되지 않았으면 연결 시작
-      if (!hasInitializedRef.current && !isInitializingRef.current) {
+      const isIdle = webrtcInitState.status === "idle";
+      if (isIdle) {
         initializeWebRTC(asInitiator, targetSocketId);
       }
     }
-  }, [localStream, initializeWebRTC]);
+  }, [
+    localStream,
+    webrtcInitState.pendingConnection,
+    webrtcInitState.status,
+    initializeWebRTC,
+    setPendingConnection,
+  ]);
 
   /**
    * socketService, roomId, localStream 변경 감지 (참조용)
@@ -588,22 +563,35 @@ function useWebRTC() {
   }, [roomId, localStream, participants]);
 
   /**
+   * MediaContext에 reconnectMedia 콜백 등록
+   * MediaContext의 reinitializeMedia에서 WebRTC 재연결을 트리거할 수 있도록 함
+   */
+  useEffect(() => {
+    if (setReconnectMediaCallback && reconnectMedia) {
+      console.log("[useWebRTC] reconnectMedia 함수를 MediaContext에 등록");
+      setReconnectMediaCallback(reconnectMedia);
+    }
+  }, [setReconnectMediaCallback, reconnectMedia]);
+
+  /**
    * 컴포넌트 언마운트 시 WebRTC 정리
    */
   useEffect(() => {
     return () => {
-      if (hasInitializedRef.current) {
+      const isReady = webrtcInitState.status === "ready";
+      if (isReady) {
         console.log("useWebRTC 정리: WebRTC 연결 종료");
         webrtcService.destroy();
-        hasInitializedRef.current = false;
+        resetWebRTCInitState();
       }
     };
-  }, [webrtcService]);
+  }, [webrtcService, webrtcInitState.status, resetWebRTCInitState]);
 
   return {
     connectionState,
     isInitiator,
     initializeWebRTC,
+    reconnectMedia, // MediaContext에서 사용
   };
 }
 

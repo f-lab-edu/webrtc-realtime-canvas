@@ -1,4 +1,5 @@
 import "./globals.css";
+import { ChatProvider } from "@/contexts/ChatContext";
 import { MediaProvider } from "@/contexts/MediaContext";
 import { RoomProvider } from "@/contexts/RoomContext";
 
@@ -12,7 +13,9 @@ export default function RootLayout({ children }) {
     <html lang="ko" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <RoomProvider>
-          <MediaProvider>{children}</MediaProvider>
+          <MediaProvider>
+            <ChatProvider>{children}</ChatProvider>
+          </MediaProvider>
         </RoomProvider>
       </body>
     </html>
