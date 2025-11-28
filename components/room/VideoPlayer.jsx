@@ -83,9 +83,7 @@ export default function VideoPlayer({
 
       if (!isLocal) {
         // 원격 비디오는 stream 받으면 재생 준비
-        console.log(
-          `🎬 [${playerType}] 원격 스트림 수신, 재생 준비 (SimplePeer 공식 패턴)`
-        );
+        console.log(`🎬 [${playerType}] 원격 스트림 수신, 재생 준비 (SimplePeer 공식 패턴)`);
         console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
         console.log(`   - videoElement.paused: ${videoElement.paused}`);
         console.log(`   - videoElement.muted: ${videoElement.muted}`);

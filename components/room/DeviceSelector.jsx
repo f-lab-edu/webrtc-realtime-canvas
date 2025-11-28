@@ -43,8 +43,7 @@ export default function DeviceSelector({
         });
 
         // 디바이스 목록 조회
-        const { videoDevices: videos, audioDevices: audios } =
-          await getAvailableDevices();
+        const { videoDevices: videos, audioDevices: audios } = await getAvailableDevices();
 
         setVideoDevices(videos);
         setAudioDevices(audios);
@@ -64,9 +63,7 @@ export default function DeviceSelector({
         setIsLoading(false);
       } catch (err) {
         console.error("[DeviceSelector] 디바이스 목록 로딩 실패:", err);
-        setError(
-          "디바이스 목록을 불러올 수 없습니다. 카메라와 마이크 권한을 허용해주세요."
-        );
+        setError("디바이스 목록을 불러올 수 없습니다. 카메라와 마이크 권한을 허용해주세요.");
         setIsLoading(false);
       }
     };
@@ -163,9 +160,7 @@ export default function DeviceSelector({
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md">
           <div className="text-red-600 text-5xl mb-4 text-center">⚠️</div>
-          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">
-            디바이스 접근 오류
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">디바이스 접근 오류</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={() => window.location.reload()}
@@ -181,9 +176,7 @@ export default function DeviceSelector({
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-2xl w-full">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-          카메라와 마이크 선택
-        </h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">카메라와 마이크 선택</h2>
 
         {/* 비디오 미리보기 */}
         <div className="mb-6">
@@ -198,10 +191,7 @@ export default function DeviceSelector({
 
         {/* 카메라 선택 */}
         <div className="mb-4">
-          <label
-            htmlFor="video-select"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
+          <label htmlFor="video-select" className="block text-sm font-medium text-gray-700 mb-2">
             📹 카메라
           </label>
           <select
@@ -216,17 +206,12 @@ export default function DeviceSelector({
               </option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1">
-            {videoDevices.length}개의 카메라 사용 가능
-          </p>
+          <p className="text-xs text-gray-500 mt-1">{videoDevices.length}개의 카메라 사용 가능</p>
         </div>
 
         {/* 마이크 선택 */}
         <div className="mb-6">
-          <label
-            htmlFor="audio-select"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
+          <label htmlFor="audio-select" className="block text-sm font-medium text-gray-700 mb-2">
             🎤 마이크
           </label>
           <select
@@ -241,9 +226,7 @@ export default function DeviceSelector({
               </option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1">
-            {audioDevices.length}개의 마이크 사용 가능
-          </p>
+          <p className="text-xs text-gray-500 mt-1">{audioDevices.length}개의 마이크 사용 가능</p>
         </div>
 
         {/* 확인 버튼 */}
@@ -257,8 +240,7 @@ export default function DeviceSelector({
 
         {/* 도움말 */}
         <p className="text-xs text-gray-500 mt-4 text-center">
-          💡 OBS Virtual Camera를 사용하려면 OBS Studio를 실행하고 "가상 카메라
-          시작"을 클릭하세요.
+          💡 OBS Virtual Camera를 사용하려면 OBS Studio를 실행하고 "가상 카메라 시작"을 클릭하세요.
         </p>
       </div>
     </div>
