@@ -186,7 +186,7 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
           <Button
             type="submit"
             disabled={isSubmitting || !nickname.trim() || !!error}
-            className="w-full py-3 text-base font-medium"
+            className="w-full py-3 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-600 disabled:hover:bg-gray-600"
           >
             {isSubmitting ? "설정 중..." : "방 입장하기"}
           </Button>

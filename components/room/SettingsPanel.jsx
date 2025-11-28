@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, Mic, Video, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useMediaContext } from "@/contexts/MediaContext";
@@ -179,123 +180,136 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-gray-900 rounded-lg shadow-lg w-full max-w-2xl p-6">
+      <div className="bg-gray-900 rounded-lg shadow-lg w-[528px] h-[700px] p-6 flex flex-col overflow-hidden">
         {/* 헤더 */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <h2 className="text-xl font-semibold text-white">디바이스 설정</h2>
-          <button
+          <Button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl"
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-white"
             title="닫기"
             type="button"
           >
-            ×
-          </button>
+            <X className="h-5 w-5" />
+          </Button>
         </div>
 
-        {/* 현재 참여 모드 표시 */}
-        <div className="mb-4 p-3 bg-gray-800 rounded">
-          <p className="text-sm text-gray-300">
-            현재 참여 모드:{" "}
-            <span className="font-semibold text-white">
-              {participationMode === "viewer" ? "시청자" : "일반 참여자"}
-            </span>
-          </p>
-        </div>
-
-        {/* 에러 메시지 */}
-        {(saveError || reconnectionError) && (
-          <div className="mb-4 p-3 bg-red-900 bg-opacity-50 border border-red-700 rounded">
-            <p className="text-sm text-red-300">{saveError || reconnectionError}</p>
+        {/* 스크롤 가능한 콘텐츠 영역 */}
+        <div className="flex-1 overflow-y-auto px-1">
+          {/* 현재 참여 모드 표시 */}
+          <div className="mb-4 p-3 bg-gray-800 rounded">
+            <p className="text-sm text-gray-300">
+              현재 참여 모드:{" "}
+              <span className="font-semibold text-white">
+                {participationMode === "viewer" ? "시청자" : "일반 참여자"}
+              </span>
+            </p>
           </div>
-        )}
 
-        {/* 디바이스 로딩 중 */}
-        {isLoadingDevices ? (
-          <div className="text-center py-8">
-            <p className="text-gray-400">디바이스 목록을 불러오는 중...</p>
-          </div>
-        ) : (
-          <>
-            {/* 미리보기 비디오 */}
-            <div className="mb-6">
-              <div className="block text-sm font-medium text-gray-300 mb-2">미리보기</div>
-              <video
-                ref={previewRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-64 bg-gray-950 rounded object-cover"
-              />
+          {/* 에러 메시지 */}
+          {(saveError || reconnectionError) && (
+            <div className="mb-4 p-3 bg-red-900 bg-opacity-50 border border-red-700 rounded">
+              <p className="text-sm text-red-300">{saveError || reconnectionError}</p>
             </div>
+          )}
 
-            {/* 비디오 디바이스 선택 */}
-            <div className="mb-4">
-              <label
-                htmlFor="video-device-select"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                비디오 디바이스
-              </label>
-              <select
-                id="video-device-select"
-                value={selectedVideoId}
-                onChange={(e) => setSelectedVideoId(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded focus:outline-none focus:border-blue-500"
-                disabled={isReconnecting}
-              >
-                <option value="">선택 안 함</option>
-                {videoDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `카메라 ${device.deviceId.substring(0, 8)}`}
-                  </option>
-                ))}
-              </select>
+          {/* 디바이스 로딩 중 */}
+          {isLoadingDevices ? (
+            <div className="text-center py-8">
+              <p className="text-gray-400">디바이스 목록을 불러오는 중...</p>
             </div>
-
-            {/* 오디오 디바이스 선택 */}
-            <div className="mb-6">
-              <label
-                htmlFor="audio-device-select"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                오디오 디바이스
-              </label>
-              <select
-                id="audio-device-select"
-                value={selectedAudioId}
-                onChange={(e) => setSelectedAudioId(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded focus:outline-none focus:border-blue-500"
-                disabled={isReconnecting}
-              >
-                <option value="">선택 안 함</option>
-                {audioDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `마이크 ${device.deviceId.substring(0, 8)}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 재연결 중 로딩 UI */}
-            {isReconnecting && (
-              <div className="mb-4 p-3 bg-blue-900 bg-opacity-50 border border-blue-700 rounded flex items-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3" />
-                <p className="text-sm text-blue-300">디바이스를 변경하는 중...</p>
+          ) : (
+            <>
+              {/* 미리보기 비디오 */}
+              <div className="mb-6">
+                <div className="block text-sm font-medium text-gray-300 mb-2">미리보기</div>
+                <video
+                  ref={previewRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-[480px] h-[360px] bg-gray-950 rounded object-cover"
+                />
               </div>
-            )}
 
-            {/* 버튼 그룹 */}
-            <div className="flex justify-end gap-2">
-              <Button onClick={onClose} variant="outline" disabled={isReconnecting}>
-                취소
-              </Button>
-              <Button onClick={handleSave} disabled={isReconnecting}>
-                {isReconnecting ? "변경 중..." : "저장"}
-              </Button>
-            </div>
-          </>
-        )}
+              {/* 비디오 디바이스 선택 */}
+              <div className="mb-4">
+                <label
+                  htmlFor="video-device-select"
+                  className="flex items-center text-sm font-medium text-gray-300 mb-2"
+                >
+                  <Video className="h-4 w-4 mr-2" />
+                  비디오 디바이스
+                </label>
+                <div className="relative">
+                  <select
+                    id="video-device-select"
+                    value={selectedVideoId}
+                    onChange={(e) => setSelectedVideoId(e.target.value)}
+                    className="w-full px-3 py-2.5 pr-10 bg-gray-800 text-white border border-gray-700 rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={isReconnecting}
+                  >
+                    <option value="">선택 안 함</option>
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `카메라 ${device.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* 오디오 디바이스 선택 */}
+              <div className="mb-6">
+                <label
+                  htmlFor="audio-device-select"
+                  className="flex items-center text-sm font-medium text-gray-300 mb-2"
+                >
+                  <Mic className="h-4 w-4 mr-2" />
+                  오디오 디바이스
+                </label>
+                <div className="relative">
+                  <select
+                    id="audio-device-select"
+                    value={selectedAudioId}
+                    onChange={(e) => setSelectedAudioId(e.target.value)}
+                    className="w-full px-3 py-2.5 pr-10 bg-gray-800 text-white border border-gray-700 rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={isReconnecting}
+                  >
+                    <option value="">선택 안 함</option>
+                    {audioDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `마이크 ${device.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* 재연결 중 로딩 UI */}
+              {isReconnecting && (
+                <div className="mb-4 p-3 bg-blue-900 bg-opacity-50 border border-blue-700 rounded flex items-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3" />
+                  <p className="text-sm text-blue-300">디바이스를 변경하는 중...</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* 버튼 그룹 */}
+        <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
+          <Button onClick={onClose} variant="secondary" disabled={isReconnecting}>
+            취소
+          </Button>
+          <Button onClick={handleSave} disabled={isReconnecting}>
+            {isReconnecting ? "변경 중..." : "저장"}
+          </Button>
+        </div>
       </div>
     </div>
   );
