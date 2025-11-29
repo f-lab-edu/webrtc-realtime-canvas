@@ -105,10 +105,13 @@ export const registerRoomHandlers = (io, socket, roomManager) => {
 
       socket.join(roomId);
 
+      const room = roomManager.getRoom(roomId);
+
       socket.emit("room:joined", {
         roomId,
         participants: result.participants,
         participantNicknames: roomManager.getRoomNicknames(roomId),
+        hostSocketId: room.hostSocketId,
       });
 
       socket.to(roomId).emit("room:participant-joined", {
@@ -184,7 +187,7 @@ export const handleRoomLeave = (io, socket, roomManager) => {
       newHost: newHostId,
     });
 
-    io.to(roomId).emit("host:changed", {
+    io.to(roomId).emit("room:host-changed", {
       oldHost: socket.id,
       newHost: newHostId,
       nickname: roomManager.getParticipantNickname(newHostId),
