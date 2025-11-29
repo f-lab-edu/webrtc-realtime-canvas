@@ -44,30 +44,25 @@
 
 ### Sub-task 2-2: WebRTCService 테스트
 
-- [ ] SimplePeer 모킹 설정
+- [x] SimplePeer 모킹 설정
 
   ```javascript
-  jest.mock("simple-peer", () => {
-    return jest.fn().mockImplementation(() => ({
-      signal: jest.fn(),
-      destroy: jest.fn(),
-      on: jest.fn(),
-      // ...
-    }));
-  });
+  jest.unstable_mockModule("simple-peer", () => ({
+    default: mockSimplePeer,
+  }));
   ```
 
-- [ ] 시그널 큐 테스트
-  - [ ] peer 생성 전 시그널 → 큐에 저장
-  - [ ] peer 생성 후 → 큐 flush
-  - [ ] 큐 순서 보장 확인
-  - [ ] 빈 큐 처리
-- [ ] ICE 상태 테스트
-  - [ ] 상태 변화 콜백 호출 확인
-  - [ ] failed 상태 시 재연결 로직 (있다면)
-  - [ ] disconnected 상태 처리
-- [ ] 메모리 누수 방지 테스트
-  - [ ] removePeer 후 Map 정리 확인
-  - [ ] destroyAll 후 전체 정리 확인
+- [x] 시그널 큐 테스트
+  - [x] peer 생성 전 시그널 → 큐에 저장
+  - [x] peer 생성 후 → 큐 flush
+  - [x] 큐 순서 보장 확인
+  - [x] 빈 큐 처리
+- [x] ICE 상태 테스트
+  - [x] 상태 변화 콜백 호출 확인
+  - [x] failed 상태 시 재연결 로직 (있다면)
+  - [x] disconnected 상태 처리
+- [x] 메모리 누수 방지 테스트
+  - [x] removePeer 후 Map 정리 확인
+  - [x] destroyAll 후 전체 정리 확인
 
 > Commit: `test(frontend): WebRTCService 단위 테스트 추가`
