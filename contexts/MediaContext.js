@@ -16,7 +16,7 @@ const MediaContext = createContext(null);
 export function MediaProvider({ children }) {
   // 미디어 스트림 상태
   const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState(new Map()); // Map<socketId, MediaStream>
 
   // 미디어 제어 상태
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -643,6 +643,29 @@ export function MediaProvider({ children }) {
   }, [localStream]);
 
   /**
+   * 원격 스트림 추가 (P2P Mesh)
+   * @param {string} socketId - 참가자 Socket ID
+   * @param {MediaStream} stream - 원격 미디어 스트림
+   */
+  const addRemoteStream = useCallback((socketId, stream) => {
+    console.log(`원격 스트림 추가: ${socketId}`);
+    setRemoteStreams((prev) => new Map(prev).set(socketId, stream));
+  }, []);
+
+  /**
+   * 원격 스트림 제거 (P2P Mesh)
+   * @param {string} socketId - 참가자 Socket ID
+   */
+  const removeRemoteStream = useCallback((socketId) => {
+    console.log(`원격 스트림 제거: ${socketId}`);
+    setRemoteStreams((prev) => {
+      const next = new Map(prev);
+      next.delete(socketId);
+      return next;
+    });
+  }, []);
+
+  /**
    * 화면 공유 시작
    * @returns {Promise<void>}
    */
@@ -682,8 +705,16 @@ export function MediaProvider({ children }) {
     }
   }, [isScreenSharing]);
 
-  const startScreenShare = useCallback(async () => {
+  const startScreenShare = useCallback(async (hasScreenSharePermission = false, isHost = false) => {
     try {
+      // 권한 체크: hasScreenSharePermission 또는 isHost 필요
+      if (!hasScreenSharePermission && !isHost) {
+        const errorMessage = "화면 공유 권한이 없습니다. 호스트에게 권한을 요청하세요.";
+        console.error(errorMessage);
+        alert(errorMessage);
+        throw new Error(errorMessage);
+      }
+
       if (isScreenSharing) {
         console.log("이미 화면 공유 중입니다.");
         return;
@@ -760,16 +791,21 @@ export function MediaProvider({ children }) {
         screenStreamRef.current = null;
       }
 
-      // WebRTC Peer 정리
-      const peer = webrtcServiceRef.current?.peer;
-      if (peer && !peer.destroyed) {
-        console.log("WebRTC Peer 연결 종료");
-        peer.destroy();
-        webrtcServiceRef.current.peer = null;
-      }
+      // 모든 원격 스트림 정리 (P2P Mesh)
+      remoteStreams.forEach((stream, socketId) => {
+        console.log(`원격 스트림 정리: ${socketId}`);
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      });
+      setRemoteStreams(new Map());
 
-      // 원격 스트림 정리
-      setRemoteStream(null);
+      // 모든 WebRTC Peer 정리 (P2P Mesh)
+      const webrtcService = webrtcServiceRef.current;
+      if (webrtcService) {
+        console.log("모든 WebRTC Peer 연결 종료");
+        webrtcService.destroyAll();
+      }
 
       // 상태 초기화
       setIsVideoEnabled(true);
@@ -795,7 +831,7 @@ export function MediaProvider({ children }) {
     } catch (error) {
       console.error("미디어 정리 에러:", error);
     }
-  }, [localStream, resetWebRTCInitState, resetWebRTCReconnectionState]);
+  }, [localStream, remoteStreams, resetWebRTCInitState, resetWebRTCReconnectionState]);
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
@@ -807,8 +843,9 @@ export function MediaProvider({ children }) {
   const value = {
     // 스트림 상태
     localStream,
-    remoteStream,
-    setRemoteStream,
+    remoteStreams,
+    addRemoteStream,
+    removeRemoteStream,
 
     // 미디어 제어 상태
     isVideoEnabled,
