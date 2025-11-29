@@ -16,7 +16,7 @@ const WhiteboardContext = createContext(null);
  */
 export function WhiteboardProvider({ children }) {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, isConnected } = useRoomContext();
+  const { socketService, roomId, isConnected, isHost } = useRoomContext();
 
   // WhiteboardService 인스턴스 (전역 단일 인스턴스)
   const whiteboardServiceRef = useRef(null);
@@ -64,6 +64,7 @@ export function WhiteboardProvider({ children }) {
       console.log("[initializeWhiteboard] WhiteboardService 상태:", {
         hasService: !!whiteboardService,
         hasCanvas: !!whiteboardService?.canvas,
+        isHost,
       });
 
       // 캔버스 초기화 (중복 초기화 방지는 WhiteboardService에서 처리)
@@ -74,44 +75,52 @@ export function WhiteboardProvider({ children }) {
         canvasType: whiteboardService.canvas?.constructor?.name,
       });
 
-      // 그리기 이벤트 핸들러 등록
-      whiteboardService.enableDrawing((eventData) => {
-        // ref를 통해 최신 값 참조
-        const currentSocketService = socketServiceRef.current;
-        const currentRoomId = roomIdRef.current;
-        const currentIsConnected = isConnectedRef.current;
+      // 호스트 권한 체크: 호스트만 그리기 모드 활성화
+      if (isHost) {
+        console.log("호스트 권한: 그리기 모드 활성화");
+        // 그리기 이벤트 핸들러 등록
+        whiteboardService.enableDrawing((eventData) => {
+          // ref를 통해 최신 값 참조
+          const currentSocketService = socketServiceRef.current;
+          const currentRoomId = roomIdRef.current;
+          const currentIsConnected = isConnectedRef.current;
 
-        console.log("그리기 이벤트 핸들러 호출:", {
-          hasSocketService: !!currentSocketService,
-          roomId: currentRoomId,
-          isConnected: currentIsConnected,
-          eventType: eventData.type,
-        });
-
-        // Socket이 연결되어 있고 roomId가 있을 때만 전송
-        if (currentSocketService && currentRoomId && currentIsConnected) {
-          console.log("로컬 그리기 이벤트 전송:", eventData.type);
-          currentSocketService.emit("whiteboard:event", {
-            roomId: currentRoomId,
-            event: eventData,
-          });
-        } else {
-          console.warn("그리기 이벤트 전송 실패 - Socket 또는 방 정보 없음:", {
+          console.log("그리기 이벤트 핸들러 호출:", {
             hasSocketService: !!currentSocketService,
             roomId: currentRoomId,
             isConnected: currentIsConnected,
+            eventType: eventData.type,
           });
-        }
-      });
+
+          // Socket이 연결되어 있고 roomId가 있을 때만 전송
+          if (currentSocketService && currentRoomId && currentIsConnected) {
+            console.log("로컬 그리기 이벤트 전송:", eventData.type);
+            currentSocketService.emit("whiteboard:event", {
+              roomId: currentRoomId,
+              event: eventData,
+            });
+          } else {
+            console.warn("그리기 이벤트 전송 실패 - Socket 또는 방 정보 없음:", {
+              hasSocketService: !!currentSocketService,
+              roomId: currentRoomId,
+              isConnected: currentIsConnected,
+            });
+          }
+        });
+        setIsDrawing(true);
+      } else {
+        console.log("비호스트: 그리기 모드 비활성화 (읽기 전용)");
+        whiteboardService.disableDrawing();
+        setIsDrawing(false);
+      }
 
       canvasRef.current = canvasElement;
       setIsInitialized(true);
-      setIsDrawing(true);
       console.log("화이트보드 초기화 완료");
     } catch (error) {
       console.error("화이트보드 초기화 에러:", error);
     }
-  }, []);
+  }, [isHost]);
 
   /**
    * 원격 그리기 이벤트 적용
@@ -288,8 +297,22 @@ export function WhiteboardProvider({ children }) {
       applyRemoteEvent(data.event);
     };
 
+    // 화이트보드 권한 거부 이벤트 수신
+    const handleWhiteboardDenied = (data) => {
+      console.warn("[WhiteboardProvider] 화이트보드 권한 거부:", data.message);
+      alert(`화이트보드 권한이 거부되었습니다: ${data.message || "호스트 권한이 필요합니다."}`);
+
+      // 비호스트 사용자의 그리기 시도를 비활성화
+      const whiteboardService = whiteboardServiceRef.current;
+      if (whiteboardService) {
+        whiteboardService.disableDrawing();
+        setIsDrawing(false);
+      }
+    };
+
     // 이벤트 리스너 등록
     socketService.on("whiteboard:event", handleWhiteboardEvent);
+    socketService.on("whiteboard:denied", handleWhiteboardDenied);
 
     // 클린업 함수
     return () => {
@@ -298,6 +321,7 @@ export function WhiteboardProvider({ children }) {
       // Socket이 정리되지 않은 경우에만 이벤트 리스너 제거
       if (socketService?.socket) {
         socketService.off("whiteboard:event", handleWhiteboardEvent);
+        socketService.off("whiteboard:denied", handleWhiteboardDenied);
       } else {
         console.log("[WhiteboardProvider] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
       }
