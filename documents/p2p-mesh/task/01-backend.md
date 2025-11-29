@@ -72,16 +72,19 @@
 
 ### Sub-task 1-3: Handler 분리 (Phase 1.5)
 
-- [ ] `server/handlers/roomHandler.js` 분리
-  - [ ] `room:join`, `room:leave` 핸들러
-- [ ] `server/handlers/signalingHandler.js` 분리
-  - [ ] `webrtc:offer`, `webrtc:answer`, `webrtc:candidate` 핸들러
-- [ ] `server/handlers/screenShareHandler.js` 분리
-  - [ ] `screen:start`, `screen:stop` 핸들러
-- [ ] `server/handlers/whiteboardHandler.js` 분리
-  - [ ] `whiteboard:draw` 핸들러 (호스트 권한 체크 포함)
-- [ ] `socketHandler.js` → 라우터 역할로 리팩토링
-  - [ ] 각 핸들러 모듈 import 및 등록만 수행
+- [x] `server/handlers/roomHandler.js` 분리
+  - [x] `room:join`, `room:leave`, `user:set-nickname`, `disconnect` 핸들러
+  - [x] `handleRoomLeave` 헬퍼 함수
+- [x] `server/handlers/signalingHandler.js` 분리
+  - [x] `signal:offer`, `signal:answer`, `signal:ice-candidate` 핸들러
+  - [x] `media:reconnecting`, `media:reconnected` 핸들러
+- [x] `server/handlers/screenShareHandler.js` 분리
+  - [x] `screen-share:request`, `screen-share:started`, `screen-share:stopped` 핸들러
+  - [x] `screen-share:grant`, `screen-share:revoke` 핸들러 (호스트 전용)
+- [x] `server/handlers/whiteboardHandler.js` 분리
+  - [x] `whiteboard:event` 핸들러 (호스트 권한 체크 포함)
+- [x] `socketHandler.js` → 라우터 역할로 리팩토링 (591줄 → 30줄)
+  - [x] 각 핸들러 모듈 import 및 등록만 수행
 
 > Commit: `refactor(server): socketHandler 모듈 분리`
 
