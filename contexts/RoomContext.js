@@ -23,6 +23,11 @@ export function RoomProvider({ children }) {
   const [nickname, setNicknameState] = useState(null); // 현재 사용자 닉네임
   const [participantNicknames, setParticipantNicknames] = useState(new Map()); // socketId -> nickname 매핑
 
+  // 호스트 및 권한 관리
+  const [isHost, setIsHost] = useState(false); // 현재 사용자가 호스트인지 여부
+  const [hostSocketId, setHostSocketId] = useState(null); // 호스트의 socketId
+  const [hasScreenSharePermission, setHasScreenSharePermission] = useState(false); // 화면 공유 권한
+
   // SocketService 인스턴스 (ref로 관리하여 재생성 방지)
   const socketServiceRef = useRef(null);
 
@@ -54,6 +59,17 @@ export function RoomProvider({ children }) {
       setConnectionState("connected");
       setIsConnected(true);
       setParticipants(data.participants || []);
+
+      // 호스트 정보 설정
+      if (data.hostSocketId) {
+        setHostSocketId(data.hostSocketId);
+        const mySocketId = socketService.socket?.id;
+        const amIHost = mySocketId === data.hostSocketId;
+        setIsHost(amIHost);
+        // 호스트는 자동으로 화면 공유 권한 부여
+        setHasScreenSharePermission(amIHost);
+        console.log(`호스트 정보: ${data.hostSocketId}, 나는 호스트: ${amIHost}`);
+      }
 
       // 참가자 닉네임 맵 수신 및 저장
       if (data.participantNicknames) {
@@ -140,6 +156,34 @@ export function RoomProvider({ children }) {
         });
       }
     });
+
+    // 호스트 변경 이벤트
+    socketService.on("room:host-changed", (data) => {
+      console.log("호스트 변경:", data);
+      if (data.newHostId) {
+        setHostSocketId(data.newHostId);
+        const mySocketId = socketService.socket?.id;
+        const amINewHost = mySocketId === data.newHostId;
+        setIsHost(amINewHost);
+        // 새 호스트는 자동으로 화면 공유 권한 부여
+        if (amINewHost) {
+          setHasScreenSharePermission(true);
+          console.log("내가 새 호스트가 되었습니다.");
+        }
+      }
+    });
+
+    // 화면 공유 권한 부여
+    socketService.on("screen-share:permission-granted", () => {
+      console.log("화면 공유 권한 부여됨");
+      setHasScreenSharePermission(true);
+    });
+
+    // 화면 공유 권한 회수
+    socketService.on("screen-share:permission-revoked", () => {
+      console.log("화면 공유 권한 회수됨");
+      setHasScreenSharePermission(false);
+    });
   }, []);
 
   /**
@@ -210,10 +254,76 @@ export function RoomProvider({ children }) {
       setParticipants([]);
       setConnectionState("disconnected");
       setIsConnected(false);
+      setIsHost(false);
+      setHostSocketId(null);
+      setHasScreenSharePermission(false);
     } catch (error) {
       console.error("방 퇴장 에러:", error);
     }
   }, [roomId]);
+
+  /**
+   * 화면 공유 권한 요청
+   * 호스트에게 권한 요청
+   */
+  const requestScreenSharePermission = useCallback(() => {
+    const socketService = socketServiceRef.current;
+    if (!socketService.isSocketConnected()) {
+      console.warn("Socket이 연결되지 않았습니다.");
+      return;
+    }
+
+    console.log("화면 공유 권한 요청");
+    socketService.emit("screen-share:request");
+  }, []);
+
+  /**
+   * 화면 공유 권한 부여 (호스트 전용)
+   * @param {string} targetSocketId - 권한을 부여할 참가자의 socketId
+   */
+  const grantScreenSharePermission = useCallback(
+    (targetSocketId) => {
+      const socketService = socketServiceRef.current;
+
+      if (!isHost) {
+        console.warn("호스트만 권한을 부여할 수 있습니다.");
+        return;
+      }
+
+      if (!socketService.isSocketConnected()) {
+        console.warn("Socket이 연결되지 않았습니다.");
+        return;
+      }
+
+      console.log("화면 공유 권한 부여:", targetSocketId);
+      socketService.emit("screen-share:grant", { targetSocketId });
+    },
+    [isHost]
+  );
+
+  /**
+   * 화면 공유 권한 회수 (호스트 전용)
+   * @param {string} targetSocketId - 권한을 회수할 참가자의 socketId
+   */
+  const revokeScreenSharePermission = useCallback(
+    (targetSocketId) => {
+      const socketService = socketServiceRef.current;
+
+      if (!isHost) {
+        console.warn("호스트만 권한을 회수할 수 있습니다.");
+        return;
+      }
+
+      if (!socketService.isSocketConnected()) {
+        console.warn("Socket이 연결되지 않았습니다.");
+        return;
+      }
+
+      console.log("화면 공유 권한 회수:", targetSocketId);
+      socketService.emit("screen-share:revoke", { targetSocketId });
+    },
+    [isHost]
+  );
 
   /**
    * 채팅 영역 토글
@@ -285,10 +395,16 @@ export function RoomProvider({ children }) {
     showChat,
     nickname,
     participantNicknames,
+    isHost,
+    hostSocketId,
+    hasScreenSharePermission,
     socketService: socketServiceRef.current,
     createRoom,
     joinRoom,
     leaveRoom,
+    requestScreenSharePermission,
+    grantScreenSharePermission,
+    revokeScreenSharePermission,
     toggleChat,
     setNickname,
     updateParticipantNickname,
