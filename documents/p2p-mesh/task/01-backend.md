@@ -35,29 +35,36 @@
 
 ### Sub-task 1-2: socketHandler.js 수정
 
-- [ ] Zod 스키마 정의
+- [x] Zod 스키마 정의
 
   ```javascript
   const joinRoomSchema = z.object({
     roomId: z.string().min(1),
-    nickname: z.string().min(1).max(20)
+    nickname: z.string().min(1).max(20),
+    maxParticipants: z.number().int().min(2).max(10).optional()
   });
   ```
 
-- [ ] `room:join` 핸들러 수정
-  - [ ] 기존 참가자 목록 반환
-  - [ ] 새 참가자 입장 브로드캐스트
-- [ ] WebRTC 시그널 이벤트 수정 (`to` 필드 추가)
-  - [ ] `webrtc:offer` → `{ to, signal }`
-  - [ ] `webrtc:answer` → `{ to, signal }`
-  - [ ] `webrtc:candidate` → `{ to, signal }`
-- [ ] 화면 공유 이벤트 핸들러 추가
-  - [ ] `screen:start`
-  - [ ] `screen:stop`
-- [ ] 화이트보드 권한 체크 로직 추가 (호스트 전용)
-  - [ ] `whiteboard:draw` 핸들러에 호스트 검증 추가
-  - [ ] 비호스트 그리기 시도 시 `whiteboard:denied` 이벤트 반환
-- [ ] `disconnect` 핸들러 수정 (원자적 leaveRoom 호출)
+- [x] `room:join` 핸들러 수정
+  - [x] 기존 참가자 목록 반환
+  - [x] 새 참가자 입장 브로드캐스트
+- [x] WebRTC 시그널 이벤트 수정 (`to` 필드 추가)
+  - [x] `signal:offer` → `{ to, signal }`
+  - [x] `signal:answer` → `{ to, signal }`
+  - [x] `signal:ice-candidate` → `{ to, candidate }`
+- [x] 화면 공유 이벤트 핸들러 추가
+  - [x] `screen-share:request` (권한 검증)
+  - [x] `screen-share:started`
+  - [x] `screen-share:stopped`
+  - [x] `screen-share:grant` (호스트 전용)
+  - [x] `screen-share:revoke` (호스트 전용)
+- [x] 화이트보드 권한 체크 로직 추가 (호스트 전용)
+  - [x] `whiteboard:event` 핸들러에 호스트 검증 추가
+  - [x] 비호스트 그리기 시도 시 `whiteboard:denied` 이벤트 반환
+- [x] `disconnect` 핸들러 수정 (원자적 leaveRoom 호출)
+- [x] 서버 측 보안 강화
+  - [x] ABSOLUTE_MAX_PARTICIPANTS (10명) 강제
+  - [x] RECOMMENDED_MAX_PARTICIPANTS (6명) 경고
 
 > Commit: `feat(server): socketHandler P2P Mesh 시그널링 지원`
 

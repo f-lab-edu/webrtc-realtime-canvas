@@ -1,6 +1,7 @@
 /**
  * Socket 이벤트 핸들러
  * Socket.io 이벤트를 처리하고 방 관리 및 시그널링 중계를 담당
+ * P2P Mesh 방식 지원 (다중 참가자 WebRTC 연결)
  */
 import {
   iceCandidateSchema,
@@ -8,10 +9,15 @@ import {
   mediaReconnectingSchema,
   roomJoinSchema,
   roomLeaveSchema,
+  screenSharePermissionSchema,
   setNicknameSchema,
   signalSchema,
   whiteboardEventSchema,
 } from "../schemas/socketSchemas.js";
+
+// 서버 설정 상수
+const ABSOLUTE_MAX_PARTICIPANTS = 10; // 서버가 허용하는 절대 최대값
+const RECOMMENDED_MAX_PARTICIPANTS = 6; // 권장 최대값 (성능 고려)
 
 /**
  * Socket 이벤트 핸들러 등록
@@ -24,9 +30,6 @@ const registerSocketHandlers = (io, socket, roomManager) => {
   if (!io || !socket || !roomManager) {
     throw new Error("필수 파라미터가 누락되었습니다");
   }
-
-  // 소켓이 참가한 방 ID를 추적
-  let currentRoomId = null;
 
   /**
    * user:set-nickname 이벤트 핸들러
@@ -58,7 +61,7 @@ const registerSocketHandlers = (io, socket, roomManager) => {
     }
 
     // RoomManager에 닉네임 저장
-    roomManager.setParticipantNickname(roomId, socket.id, nickname);
+    roomManager.setParticipantNickname(socket.id, nickname);
 
     // 방의 모든 참가자들에게 닉네임 브로드캐스트
     io.to(roomId).emit("user:nickname-updated", {
@@ -74,91 +77,88 @@ const registerSocketHandlers = (io, socket, roomManager) => {
    * 클라이언트가 방에 참가할 때 호출됨
    */
   socket.on("room:join", (data) => {
-    // Zod로 파라미터 검증
-    const result = roomJoinSchema.safeParse(data);
+    try {
+      // Zod 검증
+      const { roomId, nickname, maxParticipants } = roomJoinSchema.parse(data);
+      let validatedMaxParticipants = maxParticipants;
 
-    if (!result.success) {
-      socket.emit("error", {
-        message: "유효하지 않은 방 ID",
-        details: result.error.errors,
+      console.log(
+        `[room:join] 소켓 ${socket.id}가 방 ${roomId} 참가 시도, 닉네임: ${nickname || "익명"}`
+      );
+
+      // 서버 측 추가 검증 (보안 강화)
+      if (validatedMaxParticipants) {
+        // 절대 최대값 초과 시 강제 조정
+        if (validatedMaxParticipants > ABSOLUTE_MAX_PARTICIPANTS) {
+          console.warn(
+            `[Security] 비정상적인 maxParticipants 요청: ${validatedMaxParticipants}, 클라이언트: ${socket.id}`
+          );
+          validatedMaxParticipants = ABSOLUTE_MAX_PARTICIPANTS;
+        }
+
+        // 권장값 초과 시 경고 메시지 전송
+        if (validatedMaxParticipants > RECOMMENDED_MAX_PARTICIPANTS) {
+          socket.emit("warning", {
+            message: `${validatedMaxParticipants}명은 권장 최대 인원(${RECOMMENDED_MAX_PARTICIPANTS}명)을 초과합니다. 성능 저하 가능성이 있습니다.`,
+          });
+          console.log(
+            `[room:join] 권장 인원 초과 경고 전송: ${roomId}, 요청 인원: ${validatedMaxParticipants}`
+          );
+        }
+      }
+
+      // 방 참가 시도
+      const result = roomManager.joinRoom(
+        roomId,
+        socket.id,
+        nickname || "익명",
+        validatedMaxParticipants
+      );
+
+      if (!result.success) {
+        console.warn(`[room:join] 방 참가 실패: ${result.reason}`);
+
+        if (result.reason === "ROOM_FULL") {
+          socket.emit("room:full", {
+            currentSize: result.currentSize,
+            maxSize: result.maxSize,
+          });
+        }
+        return;
+      }
+
+      // Socket.io 방 입장
+      socket.join(roomId);
+
+      // 본인에게 참가 성공 알림 (기존 참가자 목록 포함)
+      socket.emit("room:joined", {
+        roomId,
+        participants: result.participants, // 기존 참가자들 (자신 제외)
+        participantNicknames: roomManager.getRoomNicknames(roomId),
       });
-      return;
+
+      // 다른 모든 참가자에게 새 참가자 입장 알림
+      socket.to(roomId).emit("room:participant-joined", {
+        socketId: socket.id,
+        nickname: nickname || "익명",
+      });
+
+      console.log(
+        `[room:join] 방 참가 성공: ${roomId} (참가자 ${result.participants.length + 1}명)`
+      );
+    } catch (error) {
+      console.error(`[room:join] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 요청 형식입니다" });
     }
-
-    const { roomId: validatedRoomId, nickname } = result.data;
-    console.log(
-      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId} 참가 시도, 닉네임: ${nickname || "없음"}`
-    );
-
-    // 기존 방에서 나가기
-    if (currentRoomId) {
-      handleRoomLeave(io, socket, roomManager, currentRoomId);
-    }
-
-    // 방 정원 확인
-    if (roomManager.isRoomFull(validatedRoomId)) {
-      console.log(`[room:join] 방 ${validatedRoomId} 정원 초과`);
-      socket.emit("room:full");
-      return;
-    }
-
-    // 참가자 추가
-    const added = roomManager.addParticipant(validatedRoomId, socket.id);
-
-    if (!added) {
-      console.log(`[room:join] 방 ${validatedRoomId} 참가 실패`);
-      socket.emit("room:full");
-      return;
-    }
-
-    // Socket.io 방에 참가
-    socket.join(validatedRoomId);
-    currentRoomId = validatedRoomId;
-
-    // 닉네임이 제공된 경우 저장
-    if (nickname) {
-      roomManager.setParticipantNickname(validatedRoomId, socket.id, nickname);
-      console.log(`[room:join] 소켓 ${socket.id}의 닉네임 저장: ${nickname}`);
-    }
-
-    // 현재 방의 다른 참가자 목록 조회
-    const participants = roomManager
-      .getRoomParticipants(validatedRoomId)
-      .filter((id) => id !== socket.id);
-
-    // 참가자 닉네임 맵 조회
-    const participantNicknames = roomManager.getAllParticipantNicknames(validatedRoomId);
-    const nicknamesObject = Object.fromEntries(participantNicknames);
-
-    // 참가 성공 응답 (닉네임 포함)
-    socket.emit("room:joined", {
-      roomId: validatedRoomId,
-      participants,
-      participantNicknames: nicknamesObject,
-    });
-
-    console.log(
-      `[room:join] 소켓 ${socket.id}가 방 ${validatedRoomId}에 참가 완료, 기존 참가자: ${participants.length}명`
-    );
-
-    // 방의 다른 참가자들에게 새 참가자 알림 (닉네임 포함)
-    const newParticipantNickname = roomManager.getParticipantNickname(socket.id);
-    socket.to(validatedRoomId).emit("room:participant-joined", {
-      socketId: socket.id,
-      nickname: newParticipantNickname,
-    });
-    console.log(
-      `[room:join] 방 ${validatedRoomId}의 다른 참가자들에게 알림 전송, 닉네임: ${newParticipantNickname || "없음"}`
-    );
   });
 
   /**
    * room:leave 이벤트 핸들러
    * 클라이언트가 방을 나갈 때 호출됨
    */
-  socket.on("room:leave", (roomId) => {
+  socket.on("room:leave", (data) => {
     // Zod로 파라미터 검증
-    const result = roomLeaveSchema.safeParse({ roomId });
+    const result = roomLeaveSchema.safeParse(data);
 
     if (!result.success) {
       socket.emit("error", {
@@ -168,137 +168,293 @@ const registerSocketHandlers = (io, socket, roomManager) => {
       return;
     }
 
-    const { roomId: validatedRoomId } = result.data;
-    console.log(`[room:leave] 소켓 ${socket.id}가 방 ${validatedRoomId} 퇴장 시도`);
-    handleRoomLeave(io, socket, roomManager, validatedRoomId);
+    const { roomId } = result.data;
+    console.log(`[room:leave] 소켓 ${socket.id}가 방 ${roomId} 퇴장 시도`);
+    handleRoomLeave(io, socket, roomManager);
   });
 
   /**
-   * signal:offer 이벤트 핸들러
-   * WebRTC offer를 상대방에게 중계
+   * signal:offer 이벤트 핸들러 (P2P Mesh - 1:1 전달)
+   * WebRTC offer를 특정 Peer에게 중계
    */
   socket.on("signal:offer", (data) => {
-    // Zod로 파라미터 검증
-    const result = signalSchema.safeParse(data);
+    try {
+      const { to, signal } = signalSchema.parse(data);
 
-    if (!result.success) {
-      socket.emit("error", {
-        message: "유효하지 않은 시그널 데이터",
-        details: result.error.errors,
+      // 닉네임 조회
+      const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+      const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+      console.log(`[WebRTC] Offer 전달: [${senderNickname}] → [${receiverNickname}]`);
+
+      // 특정 Peer에게만 전달
+      io.to(to).emit("signal:offer", {
+        from: socket.id,
+        signal,
       });
-      return;
+    } catch (error) {
+      console.error(`[signal:offer] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 시그널 데이터" });
     }
-
-    const { to, signal } = result.data;
-
-    // 닉네임 조회
-    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
-    const receiverNickname = roomManager.getParticipantNickname(to) || to;
-
-    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:offer`);
-
-    // 대상 소켓에게 offer 전달
-    io.to(to).emit("signal:offer", {
-      from: socket.id,
-      signal,
-    });
   });
 
   /**
-   * signal:answer 이벤트 핸들러
-   * WebRTC answer를 상대방에게 중계
+   * signal:answer 이벤트 핸들러 (P2P Mesh - 1:1 전달)
+   * WebRTC answer를 특정 Peer에게 중계
    */
   socket.on("signal:answer", (data) => {
-    // Zod로 파라미터 검증
-    const result = signalSchema.safeParse(data);
+    try {
+      const { to, signal } = signalSchema.parse(data);
 
-    if (!result.success) {
-      socket.emit("error", {
-        message: "유효하지 않은 시그널 데이터",
-        details: result.error.errors,
+      // 닉네임 조회
+      const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+      const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+      console.log(`[WebRTC] Answer 전달: [${senderNickname}] → [${receiverNickname}]`);
+
+      // 특정 Peer에게만 전달
+      io.to(to).emit("signal:answer", {
+        from: socket.id,
+        signal,
       });
-      return;
+    } catch (error) {
+      console.error(`[signal:answer] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 시그널 데이터" });
     }
-
-    const { to, signal } = result.data;
-
-    // 닉네임 조회
-    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
-    const receiverNickname = roomManager.getParticipantNickname(to) || to;
-
-    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:answer`);
-
-    // 대상 소켓에게 answer 전달
-    io.to(to).emit("signal:answer", {
-      from: socket.id,
-      signal,
-    });
   });
 
   /**
-   * signal:ice-candidate 이벤트 핸들러
-   * ICE candidate를 상대방에게 중계
+   * signal:ice-candidate 이벤트 핸들러 (P2P Mesh - 1:1 전달)
+   * ICE candidate를 특정 Peer에게 중계
    */
   socket.on("signal:ice-candidate", (data) => {
-    // Zod로 파라미터 검증
-    const result = iceCandidateSchema.safeParse(data);
+    try {
+      const { to, candidate } = iceCandidateSchema.parse(data);
 
-    if (!result.success) {
-      socket.emit("error", {
-        message: "유효하지 않은 ICE candidate 데이터",
-        details: result.error.errors,
+      // 닉네임 조회
+      const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+      const receiverNickname = roomManager.getParticipantNickname(to) || to;
+
+      console.log(`[WebRTC] ICE Candidate 전달: [${senderNickname}] → [${receiverNickname}]`);
+
+      // 특정 Peer에게만 전달
+      io.to(to).emit("signal:ice-candidate", {
+        from: socket.id,
+        candidate,
       });
-      return;
+    } catch (error) {
+      console.error(`[signal:ice-candidate] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 ICE candidate 데이터" });
     }
-
-    const { to, candidate } = result.data;
-
-    // 닉네임 조회
-    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
-    const receiverNickname = roomManager.getParticipantNickname(to) || to;
-
-    console.log(`[중계] [${senderNickname}] -> [${receiverNickname}] signal:ice-candidate`);
-
-    // 대상 소켓에게 ICE candidate 전달
-    io.to(to).emit("signal:ice-candidate", {
-      from: socket.id,
-      candidate,
-    });
   });
 
   /**
-   * whiteboard:event 이벤트 핸들러
+   * whiteboard:event 이벤트 핸들러 (호스트 전용)
    * 화이트보드 그리기 이벤트를 방의 다른 참가자들에게 중계
+   *
+   * ⚠️ 권한 제어: 호스트만 화이트보드 제어 가능
    */
   socket.on("whiteboard:event", (data) => {
-    // Zod로 파라미터 검증
-    const result = whiteboardEventSchema.safeParse(data);
+    try {
+      const { roomId, event } = whiteboardEventSchema.parse(data);
 
-    if (!result.success) {
-      socket.emit("error", {
-        message: "유효하지 않은 화이트보드 이벤트 데이터",
-        details: result.error.errors,
+      const room = roomManager.getRoom(roomId);
+
+      if (!room) {
+        socket.emit("error", { message: "방을 찾을 수 없습니다" });
+        return;
+      }
+
+      // 호스트만 화이트보드 제어 가능
+      if (room.hostSocketId !== socket.id) {
+        socket.emit("whiteboard:denied", {
+          reason: "호스트만 화이트보드를 제어할 수 있습니다",
+        });
+        console.warn(
+          `[whiteboard:event] 화이트보드 권한 없음: ${socket.id} (호스트: ${room.hostSocketId})`
+        );
+        return;
+      }
+
+      // 닉네임 조회
+      const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+
+      console.log(
+        `[whiteboard:event] [${senderNickname}] 방 ${roomId}에서 이벤트 발생: ${event.type}`
+      );
+
+      // 자신을 제외한 방의 모든 참가자에게 브로드캐스트
+      socket.to(roomId).emit("whiteboard:event", {
+        roomId,
+        from: socket.id,
+        event,
       });
+
+      console.log(`[whiteboard:event] 방 ${roomId}의 다른 참가자들에게 이벤트 브로드캐스트 완료`);
+    } catch (error) {
+      console.error(`[whiteboard:event] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 화이트보드 이벤트 데이터" });
+    }
+  });
+
+  /**
+   * screen-share:request 이벤트 핸들러
+   * 화면 공유 권한 확인
+   */
+  socket.on("screen-share:request", () => {
+    const roomId = roomManager.getRoomIdBySocketId(socket.id);
+
+    if (!roomId) {
+      socket.emit("screen-share:denied", { reason: "NOT_IN_ROOM" });
       return;
     }
 
-    const { roomId, event } = result.data;
+    // 권한 확인
+    const hasPermission = roomManager.hasScreenSharePermission(roomId, socket.id);
 
-    // 닉네임 조회
-    const senderNickname = roomManager.getParticipantNickname(socket.id) || socket.id;
+    if (!hasPermission) {
+      console.warn(`[screen-share:request] 화면 공유 권한 없음: ${socket.id}`);
+      socket.emit("screen-share:denied", { reason: "NO_PERMISSION" });
+      return;
+    }
 
-    console.log(
-      `[whiteboard:event] [${senderNickname}] 방 ${roomId}에서 이벤트 발생: ${event.type}`
-    );
+    // 권한이 있으면 승인
+    console.log(`[screen-share:request] 화면 공유 승인: ${socket.id}`);
+    socket.emit("screen-share:approved");
+  });
 
-    // 방의 다른 참가자들에게 이벤트 중계
-    socket.to(roomId).emit("whiteboard:event", {
-      roomId,
-      from: socket.id,
-      event,
-    });
+  /**
+   * screen-share:started 이벤트 핸들러
+   * 화면 공유 시작 알림
+   */
+  socket.on("screen-share:started", () => {
+    const roomId = roomManager.getRoomIdBySocketId(socket.id);
 
-    console.log(`[whiteboard:event] 방 ${roomId}의 다른 참가자들에게 이벤트 브로드캐스트 완료`);
+    if (roomId) {
+      console.log(`[screen-share:started] 화면 공유 시작: ${socket.id}`);
+
+      // 방의 모든 참가자에게 브로드캐스트
+      io.to(roomId).emit("screen-share:started", {
+        socketId: socket.id,
+        nickname: roomManager.getParticipantNickname(socket.id),
+      });
+    }
+  });
+
+  /**
+   * screen-share:stopped 이벤트 핸들러
+   * 화면 공유 중지 알림
+   */
+  socket.on("screen-share:stopped", () => {
+    const roomId = roomManager.getRoomIdBySocketId(socket.id);
+
+    if (roomId) {
+      console.log(`[screen-share:stopped] 화면 공유 중지: ${socket.id}`);
+
+      // 방의 모든 참가자에게 브로드캐스트
+      io.to(roomId).emit("screen-share:stopped", {
+        socketId: socket.id,
+      });
+    }
+  });
+
+  /**
+   * screen-share:grant 이벤트 핸들러
+   * 화면 공유 권한 부여 (호스트 전용)
+   */
+  socket.on("screen-share:grant", (data) => {
+    try {
+      const { targetSocketId } = screenSharePermissionSchema.parse(data);
+
+      const roomId = roomManager.getRoomIdBySocketId(socket.id);
+
+      if (!roomId) {
+        socket.emit("error", { message: "방을 찾을 수 없습니다" });
+        return;
+      }
+
+      // 호스트 권한 확인
+      const hostSocketId = roomManager.getHost(roomId);
+      if (socket.id !== hostSocketId) {
+        console.warn(`[screen-share:grant] 호스트가 아닌 사용자의 권한 부여 시도: ${socket.id}`);
+        socket.emit("error", { message: "호스트만 권한을 부여할 수 있습니다" });
+        return;
+      }
+
+      // 권한 부여
+      const result = roomManager.grantScreenSharePermission(roomId, targetSocketId);
+
+      if (result.success) {
+        console.log(`[screen-share:grant] 화면 공유 권한 부여: ${targetSocketId}`);
+
+        // 권한을 받은 사용자에게 알림
+        io.to(targetSocketId).emit("screen-share:permission-granted");
+
+        // 방의 모든 참가자에게 브로드캐스트
+        io.to(roomId).emit("screen-share:permission-updated", {
+          targetSocketId,
+          granted: true,
+          nickname: roomManager.getParticipantNickname(targetSocketId),
+        });
+      } else {
+        socket.emit("error", { message: "권한 부여 실패" });
+      }
+    } catch (error) {
+      console.error(`[screen-share:grant] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 요청 데이터" });
+    }
+  });
+
+  /**
+   * screen-share:revoke 이벤트 핸들러
+   * 화면 공유 권한 회수 (호스트 전용)
+   */
+  socket.on("screen-share:revoke", (data) => {
+    try {
+      const { targetSocketId } = screenSharePermissionSchema.parse(data);
+
+      const roomId = roomManager.getRoomIdBySocketId(socket.id);
+
+      if (!roomId) {
+        socket.emit("error", { message: "방을 찾을 수 없습니다" });
+        return;
+      }
+
+      // 호스트 권한 확인
+      const hostSocketId = roomManager.getHost(roomId);
+      if (socket.id !== hostSocketId) {
+        console.warn(`[screen-share:revoke] 호스트가 아닌 사용자의 권한 회수 시도: ${socket.id}`);
+        socket.emit("error", { message: "호스트만 권한을 회수할 수 있습니다" });
+        return;
+      }
+
+      // 권한 회수
+      const result = roomManager.revokeScreenSharePermission(roomId, targetSocketId);
+
+      if (result.success) {
+        console.log(`[screen-share:revoke] 화면 공유 권한 회수: ${targetSocketId}`);
+
+        // 권한을 잃은 사용자에게 알림
+        io.to(targetSocketId).emit("screen-share:permission-revoked");
+
+        // 방의 모든 참가자에게 브로드캐스트
+        io.to(roomId).emit("screen-share:permission-updated", {
+          targetSocketId,
+          granted: false,
+          nickname: roomManager.getParticipantNickname(targetSocketId),
+        });
+      } else {
+        socket.emit("error", {
+          message:
+            result.reason === "CANNOT_REVOKE_HOST_PERMISSION"
+              ? "호스트의 권한은 회수할 수 없습니다"
+              : "권한 회수 실패",
+        });
+      }
+    } catch (error) {
+      console.error(`[screen-share:revoke] 검증 실패:`, error);
+      socket.emit("error", { message: "잘못된 요청 데이터" });
+    }
   });
 
   /**
@@ -371,15 +527,15 @@ const registerSocketHandlers = (io, socket, roomManager) => {
   });
 
   /**
-   * disconnect 이벤트 핸들러
+   * disconnect 이벤트 핸들러 (원자적 퇴장 처리)
    * 소켓 연결이 끊어질 때 자동으로 방에서 제거
+   *
+   * ⚠️ Critical Fix: leaveRoom()이 호스트 승계를 원자적으로 처리하므로
+   * 외부에서 별도로 transferHost()를 호출할 필요 없음
    */
   socket.on("disconnect", (reason) => {
     console.log(`[disconnect] 소켓 ${socket.id} 연결 해제, 이유: ${reason}`);
-
-    if (currentRoomId) {
-      handleRoomLeave(io, socket, roomManager, currentRoomId);
-    }
+    handleRoomLeave(io, socket, roomManager);
   });
 };
 
@@ -388,25 +544,47 @@ const registerSocketHandlers = (io, socket, roomManager) => {
  * @param {Object} io - Socket.io 서버 인스턴스
  * @param {Object} socket - Socket.io 소켓 인스턴스
  * @param {Object} roomManager - RoomManager 인스턴스
- * @param {string} roomId - 방 ID
  */
-const handleRoomLeave = (io, socket, roomManager, roomId) => {
+const handleRoomLeave = (io, socket, roomManager) => {
   // 파라미터 검증
-  if (!io || !socket || !roomManager || !roomId) {
+  if (!io || !socket || !roomManager) {
     return;
   }
 
-  // 참가자 제거
-  const removed = roomManager.removeParticipant(roomId, socket.id);
+  // 원자적 퇴장 처리 (호스트 승계 포함)
+  const result = roomManager.leaveRoom(socket.id);
 
-  if (removed) {
-    // Socket.io 방에서 나가기
-    socket.leave(roomId);
+  if (!result) {
+    return;
+  }
 
-    // 방의 다른 참가자들에게 퇴장 알림
+  const { roomId, wasHost, newHostId, remainingParticipants } = result;
+
+  // Socket.io 방에서 나가기
+  socket.leave(roomId);
+
+  // 호스트가 퇴장하고 새 호스트가 있는 경우 알림
+  if (wasHost && newHostId) {
+    console.log(`[handleRoomLeave] 호스트 권한 자동 이전: ${socket.id} → ${newHostId}`);
+
+    // 새 호스트에게 알림
+    io.to(newHostId).emit("host:transferred", {
+      oldHost: socket.id,
+      newHost: newHostId,
+    });
+
+    // 방의 모든 참가자에게 브로드캐스트
+    io.to(roomId).emit("host:changed", {
+      oldHost: socket.id,
+      newHost: newHostId,
+      nickname: roomManager.getParticipantNickname(newHostId),
+    });
+  }
+
+  // 남은 참가자들에게 퇴장 알림
+  if (remainingParticipants.length > 0) {
     socket.to(roomId).emit("room:participant-left", socket.id);
-
-    console.log(`[handleRoomLeave] 소켓 ${socket.id}가 방 ${roomId}에서 퇴장 완료`);
+    console.log(`[handleRoomLeave] 참가자 퇴장 알림 전송: ${roomId}`);
   }
 };
 
