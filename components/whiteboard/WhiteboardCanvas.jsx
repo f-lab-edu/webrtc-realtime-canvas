@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRoomContext } from "@/contexts/RoomContext";
 import { useWhiteboard } from "@/contexts/WhiteboardContext";
 
 /**
  * WhiteboardCanvas 컴포넌트
  * Fabric.js 기반 화이트보드 캔버스를 렌더링
+ * 호스트: cursor: crosshair (그리기 가능)
+ * 비호스트: cursor: default + pointer-events: none (읽기 전용)
  */
 export default function WhiteboardCanvas() {
   const canvasElementRef = useRef(null);
   const { initializeWhiteboard, setCanvasSize } = useWhiteboard();
+  const { isHost } = useRoomContext();
   const containerRef = useRef(null);
 
   /**
@@ -63,7 +67,13 @@ export default function WhiteboardCanvas() {
   return (
     <div ref={containerRef} className="w-full h-full bg-white">
       {/* Fabric.js 캔버스 */}
-      <canvas ref={canvasElementRef} />
+      <canvas
+        ref={canvasElementRef}
+        style={{
+          cursor: isHost ? "crosshair" : "default",
+          pointerEvents: isHost ? "auto" : "none",
+        }}
+      />
     </div>
   );
 }

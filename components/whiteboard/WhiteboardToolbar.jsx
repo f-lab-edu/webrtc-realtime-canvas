@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useRoomContext } from "@/contexts/RoomContext";
 import { useWhiteboard } from "@/contexts/WhiteboardContext";
 
 /**
  * WhiteboardToolbar 컴포넌트
  * 브러시 색상, 두께 조절, 캔버스 초기화 기능 제공
+ * 호스트만 제어 가능, 비호스트는 읽기 전용 안내 메시지 표시
  */
 export default function WhiteboardToolbar() {
   const { clearCanvas, setBrushColor, setBrushWidth } = useWhiteboard();
+  const { isHost } = useRoomContext();
 
   // 브러시 설정 상태
   const [selectedColor, setSelectedColor] = useState("#000000");
@@ -60,6 +63,19 @@ export default function WhiteboardToolbar() {
     }
   };
 
+  // 비호스트: 읽기 전용 안내 메시지 표시
+  if (!isHost) {
+    return (
+      <div className="flex items-center justify-center p-4 bg-gray-100 border-b">
+        <div className="flex items-center gap-2 text-gray-600">
+          <span className="text-lg">🔒</span>
+          <span className="text-sm font-medium">호스트만 화이트보드를 제어할 수 있습니다</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 호스트: 브러시 색상, 두께, 지우기 버튼 활성화
   return (
     <div className="flex items-center gap-4 p-4 bg-gray-100 border-b">
       {/* 색상 선택 */}
