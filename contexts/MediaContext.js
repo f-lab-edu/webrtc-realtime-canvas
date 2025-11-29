@@ -705,67 +705,70 @@ export function MediaProvider({ children }) {
     }
   }, [isScreenSharing]);
 
-  const startScreenShare = useCallback(async (hasScreenSharePermission = false, isHost = false) => {
-    try {
-      // 권한 체크: hasScreenSharePermission 또는 isHost 필요
-      if (!hasScreenSharePermission && !isHost) {
-        const errorMessage = "화면 공유 권한이 없습니다. 호스트에게 권한을 요청하세요.";
-        console.error(errorMessage);
-        alert(errorMessage);
-        throw new Error(errorMessage);
+  const startScreenShare = useCallback(
+    async (hasScreenSharePermission = false, isHost = false) => {
+      try {
+        // 권한 체크: hasScreenSharePermission 또는 isHost 필요
+        if (!hasScreenSharePermission && !isHost) {
+          const errorMessage = "화면 공유 권한이 없습니다. 호스트에게 권한을 요청하세요.";
+          console.error(errorMessage);
+          alert(errorMessage);
+          throw new Error(errorMessage);
+        }
+
+        if (isScreenSharing) {
+          console.log("이미 화면 공유 중입니다.");
+          return;
+        }
+
+        console.log("화면 공유 시작");
+
+        // 화면 공유 스트림 획득
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            cursor: "always",
+          },
+          audio: false,
+        });
+
+        const screenTrack = screenStream.getVideoTracks()[0];
+        const webrtcService = webrtcServiceRef.current;
+
+        // 현재 비디오 트랙 저장
+        const currentVideoTrack = webrtcService.getCurrentVideoTrack();
+        if (currentVideoTrack) {
+          originalVideoTrackRef.current = currentVideoTrack;
+        }
+
+        // WebRTC 연결에서 비디오 트랙 교체
+        if (currentVideoTrack) {
+          webrtcService.replaceTrack(currentVideoTrack, screenTrack);
+        }
+
+        // 화면 공유 중지 이벤트 처리 (사용자가 브라우저 UI에서 중지)
+        const handleScreenEnded = () => {
+          console.log("화면 공유가 사용자에 의해 중지됨");
+          stopScreenShare();
+        };
+        screenTrack.onended = handleScreenEnded;
+
+        screenStreamRef.current = screenStream;
+        setIsScreenSharing(true);
+        console.log("화면 공유 시작 완료");
+      } catch (error) {
+        console.error("화면 공유 시작 실패:", error);
+
+        if (error.name === "NotAllowedError") {
+          console.log("사용자가 화면 공유를 거부했습니다.");
+        } else {
+          alert(`화면 공유 실패: ${error.message}`);
+        }
+
+        throw error;
       }
-
-      if (isScreenSharing) {
-        console.log("이미 화면 공유 중입니다.");
-        return;
-      }
-
-      console.log("화면 공유 시작");
-
-      // 화면 공유 스트림 획득
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: "always",
-        },
-        audio: false,
-      });
-
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const webrtcService = webrtcServiceRef.current;
-
-      // 현재 비디오 트랙 저장
-      const currentVideoTrack = webrtcService.getCurrentVideoTrack();
-      if (currentVideoTrack) {
-        originalVideoTrackRef.current = currentVideoTrack;
-      }
-
-      // WebRTC 연결에서 비디오 트랙 교체
-      if (currentVideoTrack) {
-        webrtcService.replaceTrack(currentVideoTrack, screenTrack);
-      }
-
-      // 화면 공유 중지 이벤트 처리 (사용자가 브라우저 UI에서 중지)
-      const handleScreenEnded = () => {
-        console.log("화면 공유가 사용자에 의해 중지됨");
-        stopScreenShare();
-      };
-      screenTrack.onended = handleScreenEnded;
-
-      screenStreamRef.current = screenStream;
-      setIsScreenSharing(true);
-      console.log("화면 공유 시작 완료");
-    } catch (error) {
-      console.error("화면 공유 시작 실패:", error);
-
-      if (error.name === "NotAllowedError") {
-        console.log("사용자가 화면 공유를 거부했습니다.");
-      } else {
-        alert(`화면 공유 실패: ${error.message}`);
-      }
-
-      throw error;
-    }
-  }, [isScreenSharing, stopScreenShare]);
+    },
+    [isScreenSharing, stopScreenShare]
+  );
 
   /**
    * 모든 미디어 스트림 정리
@@ -775,13 +778,15 @@ export function MediaProvider({ children }) {
       console.log("미디어 리소스 정리 시작");
 
       // 로컬 스트림 정리
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-          console.log(`트랙 중지: ${track.kind}`);
-        });
-        setLocalStream(null);
-      }
+      setLocalStream((prevStream) => {
+        if (prevStream) {
+          prevStream.getTracks().forEach((track) => {
+            track.stop();
+            console.log(`트랙 중지: ${track.kind}`);
+          });
+        }
+        return null;
+      });
 
       // 화면 공유 스트림 정리
       if (screenStreamRef.current) {
@@ -792,13 +797,15 @@ export function MediaProvider({ children }) {
       }
 
       // 모든 원격 스트림 정리 (P2P Mesh)
-      remoteStreams.forEach((stream, socketId) => {
-        console.log(`원격 스트림 정리: ${socketId}`);
-        stream.getTracks().forEach((track) => {
-          track.stop();
+      setRemoteStreams((prevStreams) => {
+        prevStreams.forEach((stream, socketId) => {
+          console.log(`원격 스트림 정리: ${socketId}`);
+          stream.getTracks().forEach((track) => {
+            track.stop();
+          });
         });
+        return new Map();
       });
-      setRemoteStreams(new Map());
 
       // 모든 WebRTC Peer 정리 (P2P Mesh)
       const webrtcService = webrtcServiceRef.current;
@@ -831,14 +838,15 @@ export function MediaProvider({ children }) {
     } catch (error) {
       console.error("미디어 정리 에러:", error);
     }
-  }, [localStream, remoteStreams, resetWebRTCInitState, resetWebRTCReconnectionState]);
+  }, [resetWebRTCInitState, resetWebRTCReconnectionState]);
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     return () => {
       cleanupMedia();
     };
-  }, [cleanupMedia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = {
     // 스트림 상태
