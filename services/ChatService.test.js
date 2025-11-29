@@ -29,10 +29,10 @@ describe("ChatService", () => {
       // Given & When: 닉네임 없이 ChatService 생성
       const service = new ChatService(socketId);
 
-      // Then: 기본 닉네임이 생성됨
+      // Then: 기본 닉네임이 생성됨 (user + socketId 앞 4자리)
       const currentUser = service.getCurrentUser();
       expect(currentUser.id).toBe(socketId);
-      expect(currentUser.name).toContain("user-");
+      expect(currentUser.name).toBe("usersock"); // socketId "socket-123"의 앞 4자리 "sock"
     });
   });
 

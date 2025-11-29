@@ -59,18 +59,25 @@ describe("Socket 이벤트 핸들러", () => {
     });
 
     it("방 정원이 초과되면 room:full 이벤트를 보낸다", () => {
-      // Given: 이미 2명이 참가한 방
-      roomManager.addParticipant("room-1", "user-1");
-      roomManager.addParticipant("room-1", "user-2");
+      // Given: 이미 6명이 참가한 방 (최대 인원)
+      roomManager.createRoom("room-1", "host-socket");
+      roomManager.joinRoom("room-1", "user-1", "유저1");
+      roomManager.joinRoom("room-1", "user-2", "유저2");
+      roomManager.joinRoom("room-1", "user-3", "유저3");
+      roomManager.joinRoom("room-1", "user-4", "유저4");
+      roomManager.joinRoom("room-1", "user-5", "유저5");
 
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const joinHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:join")[1];
 
-      // When: 3번째 참가자가 입장 시도
-      joinHandler({ roomId: "room-1" });
+      // When: 7번째 참가자가 입장 시도
+      joinHandler({ roomId: "room-1", nickname: "유저6" });
 
       // Then: room:full 이벤트 전송
-      expect(mockSocket.emit).toHaveBeenCalledWith("room:full");
+      expect(mockSocket.emit).toHaveBeenCalledWith("room:full", {
+        currentSize: 6,
+        maxSize: 6,
+      });
       expect(mockSocket.join).not.toHaveBeenCalled();
     });
 
@@ -86,7 +93,7 @@ describe("Socket 이벤트 핸들러", () => {
       expect(mockSocket.emit).toHaveBeenCalledWith(
         "error",
         expect.objectContaining({
-          message: "유효하지 않은 방 ID",
+          message: "잘못된 요청 형식입니다",
         })
       );
     });
@@ -94,17 +101,17 @@ describe("Socket 이벤트 핸들러", () => {
 
   describe("room:leave 이벤트", () => {
     it("방에서 나가면 참가자가 제거되고 알림이 전송된다", () => {
-      // Given: 방에 참가한 상태
-      roomManager.addParticipant("room-1", mockSocket.id);
+      // Given: 호스트가 방을 생성한 상태
+      roomManager.createRoom("room-1", mockSocket.id);
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const leaveHandler = mockSocket.on.mock.calls.find((call) => call[0] === "room:leave")[1];
 
       // When: 방 퇴장 이벤트 발생
-      leaveHandler("room-1");
+      leaveHandler({ roomId: "room-1" });
 
-      // Then: 참가자 제거 및 알림 전송
+      // Then: 소켓에서 방 나가기 및 방 삭제 (호스트가 나가서 빈 방이 됨)
       expect(mockSocket.leave).toHaveBeenCalledWith("room-1");
-      expect(roomManager.getRoomParticipants("room-1")).toHaveLength(0);
+      expect(roomManager.getRoomInfo("room-1")).toBeNull();
     });
   });
 
@@ -139,7 +146,7 @@ describe("Socket 이벤트 핸들러", () => {
 
       // Then: 에러 응답 전송
       expect(mockSocket.emit).toHaveBeenCalledWith("error", {
-        message: "유효하지 않은 시그널 데이터",
+        message: "잘못된 시그널 데이터",
       });
     });
   });
@@ -192,7 +199,8 @@ describe("Socket 이벤트 핸들러", () => {
 
   describe("whiteboard:event 이벤트", () => {
     it("화이트보드 이벤트를 방의 다른 참가자들에게 중계한다", () => {
-      // Given: Socket 핸들러가 등록됨
+      // Given: 호스트로 방을 생성한 상태
+      roomManager.createRoom("room-1", mockSocket.id);
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const whiteboardHandler = mockSocket.on.mock.calls.find(
         (call) => call[0] === "whiteboard:event"
@@ -211,13 +219,15 @@ describe("Socket 이벤트 핸들러", () => {
       // Then: 방의 다른 참가자들에게 이벤트 중계
       expect(mockSocket.to).toHaveBeenCalledWith("room-1");
       expect(mockSocket.emit).toHaveBeenCalledWith("whiteboard:event", {
+        roomId: "room-1",
         from: mockSocket.id,
         event: eventData.event,
       });
     });
 
     it("유효하지 않은 데이터로 호출하면 에러를 보낸다", () => {
-      // Given: Socket 핸들러가 등록됨
+      // Given: 호스트로 방을 생성한 상태
+      roomManager.createRoom("room-1", mockSocket.id);
       registerSocketHandlers(mockIo, mockSocket, roomManager);
       const whiteboardHandler = mockSocket.on.mock.calls.find(
         (call) => call[0] === "whiteboard:event"
@@ -228,7 +238,7 @@ describe("Socket 이벤트 핸들러", () => {
 
       // Then: 에러 응답 전송
       expect(mockSocket.emit).toHaveBeenCalledWith("error", {
-        message: "유효하지 않은 화이트보드 이벤트 데이터",
+        message: "잘못된 화이트보드 이벤트 데이터",
       });
     });
   });
