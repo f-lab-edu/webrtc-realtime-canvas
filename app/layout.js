@@ -1,7 +1,5 @@
 import "./globals.css";
-import { ChatProvider } from "@/contexts/ChatContext";
-import { MediaProvider } from "@/contexts/MediaContext";
-import { RoomProvider } from "@/contexts/RoomContext";
+import { ChatProvider, MediaProvider, RoomProvider, SFUProvider } from "@/contexts";
 
 export const metadata = {
   title: "WebRTC 1:1 Communication",
@@ -13,9 +11,11 @@ export default function RootLayout({ children }) {
     <html lang="ko" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <RoomProvider>
-          <MediaProvider>
-            <ChatProvider>{children}</ChatProvider>
-          </MediaProvider>
+          <SFUProvider>
+            <MediaProvider>
+              <ChatProvider>{children}</ChatProvider>
+            </MediaProvider>
+          </SFUProvider>
         </RoomProvider>
       </body>
     </html>
