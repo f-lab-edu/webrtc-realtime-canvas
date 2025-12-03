@@ -1,7 +1,7 @@
 "use client";
 
-import VideoPlayer from "./VideoPlayer";
 import styles from "./VideoGrid.module.css";
+import VideoPlayer from "./VideoPlayer";
 
 /**
  * VideoGrid 컴포넌트

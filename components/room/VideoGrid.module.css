@@ -21,11 +21,11 @@
   height: 100%;
 }
 
-/* 2명: 1x2 레이아웃 (가로 나란히) */
+/* 2명: 2x1 레이아웃 (세로 스택) - 사이드바에 적합 */
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: 1fr;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(2, 1fr);
   gap: 8px;
   padding: 8px;
   width: 100%;

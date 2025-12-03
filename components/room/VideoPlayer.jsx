@@ -60,7 +60,7 @@ export default function VideoPlayer({
   const videoEnabled = mediaState?.videoEnabled ?? isVideoEnabled;
 
   // 닉네임 첫 글자 (아바타용)
-  const initial = nickname ? nickname.charAt(0).toUpperCase() : (isLocal ? "나" : "?");
+  const initial = nickname ? nickname.charAt(0).toUpperCase() : isLocal ? "나" : "?";
 
   return (
     <div className="relative w-full h-full bg-gray-900 rounded-lg overflow-hidden">
@@ -105,14 +105,20 @@ export default function VideoPlayer({
       <div className="absolute top-2 right-2 flex gap-2">
         {/* 마이크 상태 */}
         {!audioEnabled && (
-          <div className="w-8 h-8 bg-red-500/80 backdrop-blur-sm rounded-full flex items-center justify-center" title="마이크 꺼짐">
+          <div
+            className="w-8 h-8 bg-red-500/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+            title="마이크 꺼짐"
+          >
             <span className="text-white text-sm">🔇</span>
           </div>
         )}
 
         {/* 비디오 상태 */}
         {!videoEnabled && stream && (
-          <div className="w-8 h-8 bg-red-500/80 backdrop-blur-sm rounded-full flex items-center justify-center" title="비디오 꺼짐">
+          <div
+            className="w-8 h-8 bg-red-500/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+            title="비디오 꺼짐"
+          >
             <span className="text-white text-sm">📹</span>
           </div>
         )}
