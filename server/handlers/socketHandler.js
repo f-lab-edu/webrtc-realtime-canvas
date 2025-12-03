@@ -3,8 +3,8 @@
  * 각 도메인별 핸들러 모듈을 등록하는 역할만 수행
  */
 import { registerRoomHandlers } from "./roomHandler.js";
-import { registerSignalingHandlers } from "./signalingHandler.js";
 import { registerScreenShareHandlers } from "./screenShareHandler.js";
+import { registerSignalingHandlers } from "./signalingHandler.js";
 import { registerWhiteboardHandlers } from "./whiteboardHandler.js";
 
 /**

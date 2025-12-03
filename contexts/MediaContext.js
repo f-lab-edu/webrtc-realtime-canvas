@@ -851,6 +851,8 @@ export function MediaProvider({ children }) {
   const value = {
     // 스트림 상태
     localStream,
+    // 1:1 호환성 레이어: remoteStreams Map의 첫 번째 스트림을 remoteStream으로 제공
+    remoteStream: remoteStreams.size > 0 ? Array.from(remoteStreams.values())[0] : null,
     remoteStreams,
     addRemoteStream,
     removeRemoteStream,

@@ -159,9 +159,7 @@ class RoomManager {
     this.socketToRoom.delete(validatedSocketId);
     this.nicknames.delete(validatedSocketId);
 
-    console.log(
-      `[RoomManager] 참가자 퇴장: ${roomId} (남은 인원: ${room.participants.size})`
-    );
+    console.log(`[RoomManager] 참가자 퇴장: ${roomId} (남은 인원: ${room.participants.size})`);
 
     // 3. 호스트 승계 (동기적, 원자적)
     let newHostId = null;
@@ -232,9 +230,7 @@ class RoomManager {
     // 새 호스트에게 자동으로 화면 공유 권한 부여
     room.screenSharePermissions.add(validatedSocketId);
 
-    console.log(
-      `[RoomManager] 호스트 이전: ${validatedRoomId}, ${oldHost} → ${validatedSocketId}`
-    );
+    console.log(`[RoomManager] 호스트 이전: ${validatedRoomId}, ${oldHost} → ${validatedSocketId}`);
 
     return { success: true, oldHost, newHost: validatedSocketId };
   }

@@ -17,6 +17,7 @@ export function RoomProvider({ children }) {
   // 상태 관리
   const [roomId, setRoomId] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [pendingPeers, setPendingPeers] = useState([]); // WebRTC 연결 대기 중인 peer 목록 (race condition 해결용)
   const [connectionState, setConnectionState] = useState("disconnected"); // 'connecting' | 'connected' | 'disconnected'
   const [isConnected, setIsConnected] = useState(false);
   const [showChat, setShowChat] = useState(true); // 채팅 영역 표시 여부
@@ -59,6 +60,11 @@ export function RoomProvider({ children }) {
       setConnectionState("connected");
       setIsConnected(true);
       setParticipants(data.participants || []);
+
+      // 기존 참가자 목록을 pendingPeers로 저장 (WebRTC 연결용, race condition 해결)
+      if (data.participants && data.participants.length > 0) {
+        setPendingPeers(data.participants);
+      }
 
       // 호스트 정보 설정
       if (data.hostSocketId) {
@@ -390,6 +396,8 @@ export function RoomProvider({ children }) {
   const value = {
     roomId,
     participants,
+    pendingPeers,
+    clearPendingPeers: () => setPendingPeers([]),
     connectionState,
     isConnected,
     showChat,
