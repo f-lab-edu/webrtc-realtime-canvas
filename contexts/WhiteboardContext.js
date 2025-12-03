@@ -47,7 +47,8 @@ export function WhiteboardProvider({ children }) {
   }, [socketService, roomId, isConnected]);
 
   /**
-   * 화이트보드 캔버스 초기화
+   * 화이트보드 캔버스 초기화 (1회만 수행)
+   * 그리기 모드는 별도 useEffect에서 isHost 변경 시 토글
    * @param {HTMLCanvasElement} canvasElement - HTML canvas 엘리먼트
    * @param {Object} options - 캔버스 옵션
    */
@@ -57,17 +58,23 @@ export function WhiteboardProvider({ children }) {
       return;
     }
 
+    const whiteboardService = whiteboardServiceRef.current;
+
+    // 이미 초기화된 캔버스가 있으면 스킵 (dispose/재생성 방지)
+    if (whiteboardService?.canvas) {
+      console.log("[initializeWhiteboard] 이미 초기화된 캔버스 존재, 스킵");
+      return;
+    }
+
     try {
       console.log("화이트보드 초기화 시작");
-      const whiteboardService = whiteboardServiceRef.current;
 
       console.log("[initializeWhiteboard] WhiteboardService 상태:", {
         hasService: !!whiteboardService,
-        hasCanvas: !!whiteboardService?.canvas,
-        isHost,
+        hasCanvas: false,
       });
 
-      // 캔버스 초기화 (중복 초기화 방지는 WhiteboardService에서 처리)
+      // 캔버스 초기화만 수행 (그리기 모드는 별도 useEffect에서 처리)
       whiteboardService.initialize(canvasElement, options);
 
       console.log("[initializeWhiteboard] 초기화 후 상태:", {
@@ -75,52 +82,63 @@ export function WhiteboardProvider({ children }) {
         canvasType: whiteboardService.canvas?.constructor?.name,
       });
 
-      // 호스트 권한 체크: 호스트만 그리기 모드 활성화
-      if (isHost) {
-        console.log("호스트 권한: 그리기 모드 활성화");
-        // 그리기 이벤트 핸들러 등록
-        whiteboardService.enableDrawing((eventData) => {
-          // ref를 통해 최신 값 참조
-          const currentSocketService = socketServiceRef.current;
-          const currentRoomId = roomIdRef.current;
-          const currentIsConnected = isConnectedRef.current;
-
-          console.log("그리기 이벤트 핸들러 호출:", {
-            hasSocketService: !!currentSocketService,
-            roomId: currentRoomId,
-            isConnected: currentIsConnected,
-            eventType: eventData.type,
-          });
-
-          // Socket이 연결되어 있고 roomId가 있을 때만 전송
-          if (currentSocketService && currentRoomId && currentIsConnected) {
-            console.log("로컬 그리기 이벤트 전송:", eventData.type);
-            currentSocketService.emit("whiteboard:event", {
-              roomId: currentRoomId,
-              event: eventData,
-            });
-          } else {
-            console.warn("그리기 이벤트 전송 실패 - Socket 또는 방 정보 없음:", {
-              hasSocketService: !!currentSocketService,
-              roomId: currentRoomId,
-              isConnected: currentIsConnected,
-            });
-          }
-        });
-        setIsDrawing(true);
-      } else {
-        console.log("비호스트: 그리기 모드 비활성화 (읽기 전용)");
-        whiteboardService.disableDrawing();
-        setIsDrawing(false);
-      }
-
       canvasRef.current = canvasElement;
       setIsInitialized(true);
       console.log("화이트보드 초기화 완료");
     } catch (error) {
       console.error("화이트보드 초기화 에러:", error);
     }
-  }, [isHost]);
+  }, []); // 의존성 없음 - 캔버스 초기화는 1회만
+
+  /**
+   * isHost 변경 시 그리기 모드 토글
+   * 캔버스 재초기화 없이 그리기 모드만 변경
+   */
+  useEffect(() => {
+    const whiteboardService = whiteboardServiceRef.current;
+
+    if (!whiteboardService?.canvas || !isInitialized) {
+      return;
+    }
+
+    if (isHost) {
+      console.log("호스트 권한: 그리기 모드 활성화");
+      // 그리기 이벤트 핸들러 등록
+      whiteboardService.enableDrawing((eventData) => {
+        // ref를 통해 최신 값 참조
+        const currentSocketService = socketServiceRef.current;
+        const currentRoomId = roomIdRef.current;
+        const currentIsConnected = isConnectedRef.current;
+
+        console.log("그리기 이벤트 핸들러 호출:", {
+          hasSocketService: !!currentSocketService,
+          roomId: currentRoomId,
+          isConnected: currentIsConnected,
+          eventType: eventData.type,
+        });
+
+        // Socket이 연결되어 있고 roomId가 있을 때만 전송
+        if (currentSocketService && currentRoomId && currentIsConnected) {
+          console.log("로컬 그리기 이벤트 전송:", eventData.type);
+          currentSocketService.emit("whiteboard:event", {
+            roomId: currentRoomId,
+            event: eventData,
+          });
+        } else {
+          console.warn("그리기 이벤트 전송 실패 - Socket 또는 방 정보 없음:", {
+            hasSocketService: !!currentSocketService,
+            roomId: currentRoomId,
+            isConnected: currentIsConnected,
+          });
+        }
+      });
+      setIsDrawing(true);
+    } else {
+      console.log("비호스트: 그리기 모드 비활성화 (읽기 전용)");
+      whiteboardService.disableDrawing();
+      setIsDrawing(false);
+    }
+  }, [isHost, isInitialized]);
 
   /**
    * 원격 그리기 이벤트 적용

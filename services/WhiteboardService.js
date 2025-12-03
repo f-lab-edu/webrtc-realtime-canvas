@@ -62,6 +62,20 @@ class WhiteboardService {
   }
 
   /**
+   * 그리기 이벤트 리스너 제거 (중복 등록 방지)
+   */
+  removeDrawingListeners() {
+    if (!this.canvas) return;
+
+    this.canvas.off("path:created");
+    this.canvas.off("object:added");
+    this.canvas.off("object:modified");
+    this.canvas.off("object:removed");
+
+    console.log("기존 그리기 이벤트 리스너 제거");
+  }
+
+  /**
    * 그리기 이벤트 리스너 등록
    * 로컬 그리기 이벤트를 감지하여 서버로 전송
    * @param {Function} handler - 이벤트 데이터를 받을 콜백 함수
@@ -71,6 +85,12 @@ class WhiteboardService {
       console.error("캔버스가 초기화되지 않았습니다.");
       return;
     }
+
+    // 기존 이벤트 리스너 제거 (중복 방지)
+    this.removeDrawingListeners();
+
+    // 그리기 모드 명시적 활성화 (Fabric.js)
+    this.canvas.isDrawingMode = true;
 
     this.drawEventHandler = handler;
 
