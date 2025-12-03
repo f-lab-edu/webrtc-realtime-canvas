@@ -11,6 +11,7 @@ class RoomManager {
     this.rooms = new Map(); // roomId → { participants: Set, maxParticipants, hostSocketId, ... }
     this.socketToRoom = new Map(); // socketId → roomId (빠른 조회를 위한 역방향 맵)
     this.nicknames = new Map(); // socketId → nickname (전역 닉네임 관리)
+    this.producerIds = new Map(); // socketId → Set<producerId> (SFU Producer 추적)
     this.defaultMaxParticipants = defaultMaxParticipants;
   }
 
@@ -158,6 +159,7 @@ class RoomManager {
     room.screenSharePermissions.delete(validatedSocketId);
     this.socketToRoom.delete(validatedSocketId);
     this.nicknames.delete(validatedSocketId);
+    this.producerIds.delete(validatedSocketId); // SFU Producer 정보 제거
 
     console.log(`[RoomManager] 참가자 퇴장: ${roomId} (남은 인원: ${room.participants.size})`);
 
@@ -510,7 +512,103 @@ class RoomManager {
     this.rooms.clear();
     this.socketToRoom.clear();
     this.nicknames.clear();
+    this.producerIds.clear();
     console.log("[RoomManager] 리소스 정리 완료");
+  }
+
+  // ============================================
+  // SFU Producer 관리 (mediasoup 연동)
+  // ============================================
+
+  /**
+   * 참가자에게 Producer ID 추가
+   * @param {string} socketId - 참가자 소켓 ID
+   * @param {string} producerId - Producer ID
+   */
+  addProducerId(socketId, producerId) {
+    if (!socketId || !producerId) {
+      return;
+    }
+
+    if (!this.producerIds.has(socketId)) {
+      this.producerIds.set(socketId, new Set());
+    }
+
+    this.producerIds.get(socketId).add(producerId);
+    console.log(`[RoomManager] Producer 추가: socketId=${socketId}, producerId=${producerId}`);
+  }
+
+  /**
+   * 참가자의 Producer ID 제거
+   * @param {string} socketId - 참가자 소켓 ID
+   * @param {string} producerId - Producer ID
+   */
+  removeProducerId(socketId, producerId) {
+    if (!socketId || !producerId) {
+      return;
+    }
+
+    const producers = this.producerIds.get(socketId);
+    if (producers) {
+      producers.delete(producerId);
+      console.log(`[RoomManager] Producer 제거: socketId=${socketId}, producerId=${producerId}`);
+    }
+  }
+
+  /**
+   * 참가자의 모든 Producer ID 조회
+   * @param {string} socketId - 참가자 소켓 ID
+   * @returns {string[]} Producer ID 배열
+   */
+  getProducerIdsBySocketId(socketId) {
+    if (!socketId) {
+      return [];
+    }
+
+    const producers = this.producerIds.get(socketId);
+    return producers ? Array.from(producers) : [];
+  }
+
+  /**
+   * 방의 다른 참가자들의 Producer 목록 조회
+   * room:joined 응답에 기존 참가자의 Producer 목록 포함 필요
+   * @param {string} roomId - 방 ID
+   * @param {string} excludeSocketId - 제외할 소켓 ID (요청자 자신)
+   * @returns {Array<{socketId: string, producerId: string, nickname: string}>}
+   */
+  getProducersInRoom(roomId, excludeSocketId) {
+    if (!roomId) {
+      return [];
+    }
+
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return [];
+    }
+
+    const producers = [];
+
+    for (const socketId of room.participants) {
+      // 자기 자신은 제외
+      if (socketId === excludeSocketId) {
+        continue;
+      }
+
+      const producerSet = this.producerIds.get(socketId);
+      if (producerSet && producerSet.size > 0) {
+        const nickname = this.nicknames.get(socketId) || "익명";
+
+        for (const producerId of producerSet) {
+          producers.push({
+            socketId,
+            producerId,
+            nickname,
+          });
+        }
+      }
+    }
+
+    return producers;
   }
 }
 

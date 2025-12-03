@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 import express, { json } from "express";
 import { Server } from "socket.io";
 import registerChatHandlers from "./handlers/chatHandler.js";
+import { registerSfuHandlers } from "./handlers/sfuHandler.js";
 import registerSocketHandlers from "./handlers/socketHandler.js";
+import MediasoupManager from "./managers/MediasoupManager.js";
 import RoomManager from "./managers/RoomManager.js";
 
 dotenv.config();
@@ -32,9 +34,21 @@ const io = new Server(httpServer, {
 // RoomManager 인스턴스 생성
 const roomManager = new RoomManager();
 
+// MediasoupManager 싱글톤 인스턴스
+const mediasoupManager = MediasoupManager.getInstance();
+
 // 헬스 체크 엔드포인트
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// SFU 상태 엔드포인트 (디버깅용)
+app.get("/sfu/stats", (_req, res) => {
+  res.json({
+    status: "ok",
+    stats: mediasoupManager.getStats(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Socket.io 연결 처리
@@ -51,25 +65,44 @@ io.on("connection", (socket) => {
 
   // 채팅 이벤트 핸들러 등록
   registerChatHandlers(io, socket, roomManager);
+
+  // SFU 이벤트 핸들러 등록
+  registerSfuHandlers(io, socket, roomManager, mediasoupManager);
 });
 
 // 서버 시작
 const PORT = process.env.PORT || 3005;
 
-httpServer.listen(PORT, () => {
-  console.log(`Signaling server running on port ${PORT}`);
-  console.log(`CORS origin: ${corsOptions.origin}`);
-});
+// MediasoupManager 초기화 후 서버 시작
+const startServer = async () => {
+  try {
+    // mediasoup Worker 풀 초기화
+    await mediasoupManager.initialize();
+
+    httpServer.listen(PORT, () => {
+      console.log(`Signaling server running on port ${PORT}`);
+      console.log(`CORS origin: ${corsOptions.origin}`);
+      console.log(`SFU 상태 확인: http://localhost:${PORT}/sfu/stats`);
+    });
+  } catch (error) {
+    console.error("서버 시작 실패:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // 에러 핸들링
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);
+  mediasoupManager.cleanup();
   roomManager.cleanup();
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  mediasoupManager.cleanup();
   roomManager.cleanup();
   process.exit(1);
 });
@@ -77,6 +110,7 @@ process.on("unhandledRejection", (reason, promise) => {
 // 정상 종료 시 리소스 정리
 process.on("SIGTERM", () => {
   console.log("SIGTERM 신호 수신, 서버 종료 중...");
+  mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {
     console.log("서버 종료 완료");
@@ -86,6 +120,7 @@ process.on("SIGTERM", () => {
 
 process.on("SIGINT", () => {
   console.log("SIGINT 신호 수신, 서버 종료 중...");
+  mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {
     console.log("서버 종료 완료");
@@ -93,4 +128,4 @@ process.on("SIGINT", () => {
   });
 });
 
-export default { app, io, httpServer, roomManager };
+export default { app, io, httpServer, roomManager, mediasoupManager };

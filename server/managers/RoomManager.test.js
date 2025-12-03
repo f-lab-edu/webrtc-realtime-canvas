@@ -291,4 +291,101 @@ describe("RoomManager - P2P Mesh 지원", () => {
       expect(roomManager.getAllRooms()).toHaveLength(0);
     });
   });
+
+  describe("SFU Producer 관리", () => {
+    it("Producer ID를 추가할 수 있다", () => {
+      // Given: 방에 참가한 사용자
+      const roomId = "test-room";
+      const socketId = "socket-1";
+      roomManager.createRoom(roomId, socketId, "사용자1", 6);
+
+      // When: Producer ID 추가
+      roomManager.addProducerId(socketId, "producer-1");
+      roomManager.addProducerId(socketId, "producer-2");
+
+      // Then: Producer 목록에 포함
+      const producerIds = roomManager.getProducerIdsBySocketId(socketId);
+      expect(producerIds).toContain("producer-1");
+      expect(producerIds).toContain("producer-2");
+      expect(producerIds).toHaveLength(2);
+    });
+
+    it("Producer ID를 제거할 수 있다", () => {
+      // Given: Producer가 있는 사용자
+      const socketId = "socket-1";
+      roomManager.createRoom("test-room", socketId, "사용자1", 6);
+      roomManager.addProducerId(socketId, "producer-1");
+      roomManager.addProducerId(socketId, "producer-2");
+
+      // When: Producer ID 제거
+      roomManager.removeProducerId(socketId, "producer-1");
+
+      // Then: 제거된 Producer는 목록에 없음
+      const producerIds = roomManager.getProducerIdsBySocketId(socketId);
+      expect(producerIds).not.toContain("producer-1");
+      expect(producerIds).toContain("producer-2");
+      expect(producerIds).toHaveLength(1);
+    });
+
+    it("방의 다른 참가자들의 Producer 목록을 조회할 수 있다", () => {
+      // Given: 3명이 참가하고 각자 Producer 보유
+      const roomId = "test-room";
+      roomManager.createRoom(roomId, "socket-1", "앨리스", 6);
+      roomManager.joinRoom(roomId, "socket-2", "밥");
+      roomManager.joinRoom(roomId, "socket-3", "찰리");
+
+      roomManager.addProducerId("socket-1", "producer-1-video");
+      roomManager.addProducerId("socket-1", "producer-1-audio");
+      roomManager.addProducerId("socket-2", "producer-2-video");
+      roomManager.addProducerId("socket-3", "producer-3-video");
+
+      // When: socket-2 관점에서 다른 참가자의 Producer 조회
+      const producers = roomManager.getProducersInRoom(roomId, "socket-2");
+
+      // Then: socket-1, socket-3의 Producer만 포함 (socket-2 자신 제외)
+      expect(producers).toHaveLength(3);
+      expect(
+        producers.some((p) => p.socketId === "socket-1" && p.producerId === "producer-1-video")
+      ).toBe(true);
+      expect(
+        producers.some((p) => p.socketId === "socket-1" && p.producerId === "producer-1-audio")
+      ).toBe(true);
+      expect(
+        producers.some((p) => p.socketId === "socket-3" && p.producerId === "producer-3-video")
+      ).toBe(true);
+      // socket-2 자신의 Producer는 포함되지 않음
+      expect(producers.some((p) => p.socketId === "socket-2")).toBe(false);
+    });
+
+    it("참가자 퇴장 시 Producer 정보도 정리된다", () => {
+      // Given: Producer가 있는 사용자
+      const roomId = "test-room";
+      const socketId = "socket-1";
+      roomManager.createRoom(roomId, socketId, "사용자1", 6);
+      roomManager.addProducerId(socketId, "producer-1");
+
+      // When: 방 퇴장
+      roomManager.leaveRoom(socketId);
+
+      // Then: Producer 정보도 정리됨
+      const producerIds = roomManager.getProducerIdsBySocketId(socketId);
+      expect(producerIds).toHaveLength(0);
+    });
+
+    it("존재하지 않는 socketId의 Producer 조회 시 빈 배열 반환", () => {
+      // Given/When
+      const producerIds = roomManager.getProducerIdsBySocketId("non-existent");
+
+      // Then
+      expect(producerIds).toHaveLength(0);
+    });
+
+    it("존재하지 않는 방의 Producer 조회 시 빈 배열 반환", () => {
+      // Given/When
+      const producers = roomManager.getProducersInRoom("non-existent-room", "socket-1");
+
+      // Then
+      expect(producers).toHaveLength(0);
+    });
+  });
 });
