@@ -55,6 +55,12 @@ export function MediaProvider({ children }) {
   // WebRTC 재연결 콜백 함수 저장 (useWebRTC에서 제공)
   const reconnectMediaRef = useRef(null);
 
+  // SFU 콜백 함수 저장 (useSFU에서 제공)
+  const sfuCallbacksRef = useRef({
+    onVideoToggle: null,
+    onAudioToggle: null,
+  });
+
   // WebRTCService 인스턴스 초기화
   if (!webrtcServiceRef.current) {
     webrtcServiceRef.current = new WebRTCService();
@@ -67,6 +73,29 @@ export function MediaProvider({ children }) {
   const setReconnectMediaCallback = useCallback((reconnectMediaFn) => {
     reconnectMediaRef.current = reconnectMediaFn;
     console.log("[MediaContext] reconnectMedia 콜백 등록 완료");
+  }, []);
+
+  /**
+   * useSFU에서 제공하는 SFU 콜백 등록
+   * @param {Object} callbacks - { onVideoToggle, onAudioToggle }
+   */
+  const registerSFUCallbacks = useCallback((callbacks) => {
+    sfuCallbacksRef.current = {
+      onVideoToggle: callbacks.onVideoToggle || null,
+      onAudioToggle: callbacks.onAudioToggle || null,
+    };
+    console.log("[MediaContext] SFU 콜백 등록 완료");
+  }, []);
+
+  /**
+   * SFU 콜백 해제
+   */
+  const unregisterSFUCallbacks = useCallback(() => {
+    sfuCallbacksRef.current = {
+      onVideoToggle: null,
+      onAudioToggle: null,
+    };
+    console.log("[MediaContext] SFU 콜백 해제");
   }, []);
 
   /**
@@ -619,9 +648,15 @@ export function MediaProvider({ children }) {
 
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      setIsVideoEnabled(videoTrack.enabled);
-      console.log(`비디오 ${videoTrack.enabled ? "활성화" : "비활성화"}`);
+      const newState = !videoTrack.enabled;
+      videoTrack.enabled = newState;
+      setIsVideoEnabled(newState);
+      console.log(`비디오 ${newState ? "활성화" : "비활성화"}`);
+
+      // SFU 콜백 호출 (Producer pause/resume)
+      if (sfuCallbacksRef.current.onVideoToggle) {
+        sfuCallbacksRef.current.onVideoToggle(newState);
+      }
     }
   }, [localStream]);
 
@@ -636,9 +671,15 @@ export function MediaProvider({ children }) {
 
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsAudioEnabled(audioTrack.enabled);
-      console.log(`오디오 ${audioTrack.enabled ? "활성화" : "비활성화"}`);
+      const newState = !audioTrack.enabled;
+      audioTrack.enabled = newState;
+      setIsAudioEnabled(newState);
+      console.log(`오디오 ${newState ? "활성화" : "비활성화"}`);
+
+      // SFU 콜백 호출 (Producer pause/resume)
+      if (sfuCallbacksRef.current.onAudioToggle) {
+        sfuCallbacksRef.current.onAudioToggle(newState);
+      }
     }
   }, [localStream]);
 
@@ -908,6 +949,10 @@ export function MediaProvider({ children }) {
 
     // WebRTC 재연결 콜백 등록
     setReconnectMediaCallback,
+
+    // SFU 콜백 등록/해제 (useSFU에서 사용)
+    registerSFUCallbacks,
+    unregisterSFUCallbacks,
   };
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;

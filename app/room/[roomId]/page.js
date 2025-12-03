@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
 import { useMediaContext, useRoomContext, WhiteboardProvider } from "@/contexts";
+import { useSFU } from "@/hooks";
 import useChat from "@/hooks/useChat";
-import useWebRTC from "@/hooks/useWebRTC";
 import { saveNicknameToSession } from "@/lib/nicknameUtils";
 
 /**
@@ -44,14 +44,15 @@ export default function RoomPage() {
   const {
     localStream,
     remoteStream,
-    remoteStreams,
     isVideoEnabled,
     isScreenSharing,
     setParticipationMode,
     initializeMedia,
     cleanupMedia,
   } = useMediaContext();
-  useWebRTC(); // WebRTC 연결 관리
+
+  // SFU 연결 관리 (remoteStreams는 useSFU에서 제공)
+  const { remoteStreams } = useSFU();
 
   // 채팅 훅
   const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
