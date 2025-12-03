@@ -1,6 +1,6 @@
 "use client";
 
-import { useChatContext } from "@/contexts/ChatContext";
+import { useChatContext } from "@/contexts";
 
 /**
  * useChat 커스텀 훅 (단순화 버전)

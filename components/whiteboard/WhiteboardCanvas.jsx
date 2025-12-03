@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRoomContext } from "@/contexts/RoomContext";
-import { useWhiteboard } from "@/contexts/WhiteboardContext";
+import { useRoomContext, useWhiteboard } from "@/contexts";
 
 /**
  * WhiteboardCanvas 컴포넌트

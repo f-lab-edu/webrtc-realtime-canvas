@@ -1,6 +1,6 @@
 "use client";
 
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useRoomContext } from "@/contexts";
 
 /**
  * WhiteboardHeader 컴포넌트

@@ -3,7 +3,7 @@
 import { ChevronDown, Mic, Video, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useMediaContext } from "@/contexts/MediaContext";
+import { useMediaContext } from "@/contexts";
 
 /**
  * 설정 패널 컴포넌트

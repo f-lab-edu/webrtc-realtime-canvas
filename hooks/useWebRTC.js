@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useMediaContext } from "@/contexts/MediaContext";
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useMediaContext, useRoomContext } from "@/contexts";
 
 /**
  * useWebRTC 커스텀 훅

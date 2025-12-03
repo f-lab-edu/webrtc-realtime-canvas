@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useRoomContext } from "@/contexts";
 import WhiteboardService from "@/services/WhiteboardService";
 
 /**

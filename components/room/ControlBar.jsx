@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useMediaContext } from "@/contexts/MediaContext";
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useMediaContext, useRoomContext } from "@/contexts";
 
 /**
  * ControlBar 컴포넌트

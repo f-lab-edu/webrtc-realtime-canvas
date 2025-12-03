@@ -1,6 +1,6 @@
 "use client";
 
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useRoomContext } from "@/contexts";
 
 /**
  * ParticipantList 컴포넌트
