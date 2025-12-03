@@ -1,6 +1,2 @@
-# 모든 텍스트 파일을 LF로 통일
-* text=auto eol=lf
-
-# Windows 배치 파일은 CRLF 유지
-*.bat text eol=crlf
-*.cmd text eol=crlf
+# 모든 텍스트 파일을 CRLF로 통일 (Windows 환경)
+* text=auto eol=crlf
