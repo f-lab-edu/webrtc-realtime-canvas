@@ -174,10 +174,12 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         roomManager.addProducerId(socket.id, producer.id);
 
         // 같은 방의 다른 참가자들에게 새 Producer 알림
+        // appData 포함: 화면공유 여부, 닉네임 등 클라이언트 식별 정보
         socket.to(roomId).emit("sfu:new-producer", {
           producerId: producer.id,
           producerSocketId: socket.id,
           kind: producer.kind,
+          appData: producer.appData || {},
         });
 
         console.log(`[sfu:produce] roomId=${roomId}, producerId=${producer.id}, kind=${kind}`);
@@ -429,6 +431,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
   /**
    * sfu:get-producers
    * 방의 다른 참가자들의 Producer 목록 조회
+   * 응답 구조: sfu:new-producer와 동일하게 { producerId, socketId, kind, appData }
    */
   socket.on("sfu:get-producers", (data, callback) => {
     try {
@@ -438,7 +441,19 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         return callback({ error: "roomId는 필수입니다" });
       }
 
-      const producers = roomManager.getProducersInRoom(roomId, socket.id);
+      // RoomManager에서 기본 Producer 목록 조회
+      const basicProducers = roomManager.getProducersInRoom(roomId, socket.id);
+
+      // MediasoupManager에서 Producer 상세 정보(kind, appData) 조회하여 응답 구조 통일
+      const producers = basicProducers.map((item) => {
+        const producer = mediasoupManager.getProducer(item.producerId);
+        return {
+          producerId: item.producerId,
+          producerSocketId: item.socketId,
+          kind: producer?.kind || "unknown",
+          appData: producer?.appData || {},
+        };
+      });
 
       console.log(`[sfu:get-producers] roomId=${roomId}, count=${producers.length}`);
 
