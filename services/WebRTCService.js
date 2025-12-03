@@ -146,7 +146,9 @@ class WebRTCService {
             }
 
             if (state === "failed") {
-              console.error(`❌ [WebRTCService] ${socketId} ICE Connection Failed - TURN 서버 필요할 수 있음`);
+              console.error(
+                `❌ [WebRTCService] ${socketId} ICE Connection Failed - TURN 서버 필요할 수 있음`
+              );
             }
           };
 
@@ -197,12 +199,16 @@ class WebRTCService {
 
         console.log(`\n🎥 비디오 트랙: ${videoTracks.length}개`);
         videoTracks.forEach((t, i) => {
-          console.log(`   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`);
+          console.log(
+            `   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`
+          );
         });
 
         console.log(`\n🎵 오디오 트랙: ${audioTracks.length}개`);
         audioTracks.forEach((t, i) => {
-          console.log(`   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`);
+          console.log(
+            `   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`
+          );
         });
 
         // 비디오 트랙이 muted 상태면 unmute 대기
@@ -258,9 +264,20 @@ class WebRTCService {
 
       // 에러 이벤트
       peer.on("error", (error) => {
-        console.error(`[WebRTCService] ${socketId} WebRTC 에러:`, error);
+        // User-Initiated Abort는 정상 종료로 처리 (에러가 아님)
+        const errorMessage = error?.message || error?.toString() || "";
+        const isNormalClose =
+          errorMessage.includes("User-Initiated Abort") || errorMessage.includes("Close called");
+
+        if (isNormalClose) {
+          console.log(`[WebRTCService] ${socketId} 정상 연결 종료 (User-Initiated)`);
+        } else {
+          console.error(`[WebRTCService] ${socketId} WebRTC 에러:`, error);
+        }
+
+        // 핸들러 호출 시에도 정상 종료 여부 전달
         if (this.handlers.error) {
-          this.handlers.error(socketId, error);
+          this.handlers.error(socketId, error, isNormalClose);
         }
       });
 
@@ -308,7 +325,10 @@ class WebRTCService {
 
     try {
       peer.signal(signalData);
-      console.log(`[WebRTCService] 시그널 처리 완료 - ${socketId}:`, signalData.type || "candidate");
+      console.log(
+        `[WebRTCService] 시그널 처리 완료 - ${socketId}:`,
+        signalData.type || "candidate"
+      );
     } catch (error) {
       console.error(`[WebRTCService] 시그널 처리 에러 - ${socketId}:`, error);
       throw error;
@@ -332,7 +352,9 @@ class WebRTCService {
       return;
     }
 
-    console.log(`[WebRTCService] Pending signals flush 시작 - ${socketId} (${pendingSignals.length}개)`);
+    console.log(
+      `[WebRTCService] Pending signals flush 시작 - ${socketId} (${pendingSignals.length}개)`
+    );
 
     try {
       // 큐에 쌓인 시그널 순차 처리

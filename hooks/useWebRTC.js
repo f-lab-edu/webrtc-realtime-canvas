@@ -10,7 +10,7 @@ import { useRoomContext } from "@/contexts/RoomContext";
  */
 function useWebRTC() {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, participants } = useRoomContext();
+  const { socketService, roomId, pendingPeers, clearPendingPeers } = useRoomContext();
   const { webrtcService, localStream, remoteStreams, addRemoteStream, removeRemoteStream } =
     useMediaContext();
 
@@ -78,9 +78,13 @@ function useWebRTC() {
       console.log(`✅ [useWebRTC] P2P 연결 완료: ${socketId}`);
     });
 
-    // 4. Error 이벤트: WebRTC 에러
-    webrtcService.onError((socketId, error) => {
-      console.error(`❌ [useWebRTC] WebRTC 에러 from ${socketId}:`, error);
+    // 4. Error 이벤트: WebRTC 에러 (정상 종료와 실제 에러 구분)
+    webrtcService.onError((socketId, error, isNormalClose) => {
+      if (isNormalClose) {
+        console.log(`🔌 [useWebRTC] ${socketId} 정상 연결 종료`);
+      } else {
+        console.error(`❌ [useWebRTC] WebRTC 에러 from ${socketId}:`, error);
+      }
     });
 
     // 5. Close 이벤트: 연결 종료
@@ -96,85 +100,60 @@ function useWebRTC() {
   }, [webrtcService, addRemoteStream, removeRemoteStream]);
 
   /**
-   * room:joined 핸들러 (기존 참가자와 연결)
-   * 나(신규 참가자)가 기존 참가자들에게 offer 전송
+   * pendingPeers 처리 (race condition 해결)
+   * room:joined가 useWebRTC 리스너 등록 전에 발생했을 때 대기 중인 peer들과 연결
    */
-  const handleRoomJoined = useCallback(
-    (data) => {
-      console.log("[room:joined] 방 참가 성공:", data);
+  useEffect(() => {
+    if (!pendingPeers || pendingPeers.length === 0) return;
+    if (!localStreamRef.current || !webrtcServiceRef.current || !socketServiceRef.current) return;
 
-      const { participants: existingParticipants } = data;
-      const mySocketId = socketServiceRef.current?.socket?.id;
+    const mySocketId = socketServiceRef.current?.socket?.id;
+    const otherParticipants = pendingPeers.filter((p) => p !== mySocketId);
 
-      if (!existingParticipants || existingParticipants.length === 0) {
-        console.log("기존 참가자가 없습니다.");
-        return;
-      }
+    if (otherParticipants.length === 0) {
+      clearPendingPeers();
+      return;
+    }
 
-      // 자신을 제외한 기존 참가자들과 연결
-      const otherParticipants = existingParticipants.filter((p) => p !== mySocketId);
+    console.log(`[useWebRTC] pendingPeers 처리: ${otherParticipants.length}명과 연결 시작`);
 
-      if (otherParticipants.length === 0) {
-        console.log("연결할 다른 참가자가 없습니다.");
-        return;
-      }
+    otherParticipants.forEach((participantSocketId) => {
+      console.log(`[P2P Mesh] 연결 초기화: ${participantSocketId} (initiator: true)`);
+      webrtcServiceRef.current.initializePeer(participantSocketId, true, localStreamRef.current);
+    });
 
-      if (!localStreamRef.current) {
-        console.warn("로컬 스트림이 아직 준비되지 않았습니다. 연결을 나중에 시도합니다.");
-        return;
-      }
-
-      console.log(`기존 참가자 ${otherParticipants.length}명과 연결 시작 (나는 initiator)`);
-
-      // 기존 참가자들에게 Offer 전송 (initiator: true)
-      otherParticipants.forEach((participantSocketId) => {
-        console.log(`[P2P Mesh] 연결 초기화: ${participantSocketId} (initiator: true)`);
-        webrtcServiceRef.current.initializePeer(
-          participantSocketId,
-          true,
-          localStreamRef.current
-        );
-      });
-    },
-    []
-  );
+    clearPendingPeers();
+  }, [pendingPeers, clearPendingPeers]);
 
   /**
    * room:participant-joined 핸들러 (새 참가자 연결)
    * 기존 참가자인 나는 새 참가자의 offer를 기다림 (initiator: false)
    */
-  const handleParticipantJoined = useCallback(
-    (data) => {
-      const newParticipantSocketId = typeof data === "string" ? data : data.socketId;
-      const newParticipantNickname = typeof data === "object" ? data.nickname : null;
+  const handleParticipantJoined = useCallback((data) => {
+    const newParticipantSocketId = typeof data === "string" ? data : data.socketId;
+    const newParticipantNickname = typeof data === "object" ? data.nickname : null;
 
-      console.log(
-        `[room:participant-joined] 새 참가자 입장: ${newParticipantSocketId} (${newParticipantNickname || "알 수 없음"})`
-      );
+    console.log(
+      `[room:participant-joined] 새 참가자 입장: ${newParticipantSocketId} (${newParticipantNickname || "알 수 없음"})`
+    );
 
-      const mySocketId = socketServiceRef.current?.socket?.id;
+    const mySocketId = socketServiceRef.current?.socket?.id;
 
-      // 자기 자신인 경우 무시
-      if (mySocketId === newParticipantSocketId) {
-        console.log("자기 자신의 입장 이벤트입니다. 무시");
-        return;
-      }
+    // 자기 자신인 경우 무시
+    if (mySocketId === newParticipantSocketId) {
+      console.log("자기 자신의 입장 이벤트입니다. 무시");
+      return;
+    }
 
-      if (!localStreamRef.current) {
-        console.warn("로컬 스트림이 아직 준비되지 않았습니다. 연결을 나중에 시도합니다.");
-        return;
-      }
+    if (!localStreamRef.current) {
+      console.warn("로컬 스트림이 아직 준비되지 않았습니다. 연결을 나중에 시도합니다.");
+      return;
+    }
 
-      // 새 참가자의 Offer를 기다림 (initiator: false)
-      console.log(`[P2P Mesh] Peer 준비: ${newParticipantSocketId} (initiator: false, Offer 대기)`);
-      webrtcServiceRef.current.initializePeer(
-        newParticipantSocketId,
-        false,
-        localStreamRef.current
-      );
-    },
-    []
-  );
+    // 새 참가자의 Offer를 기다림 (initiator: false)
+    console.log(`[P2P Mesh] Peer 준비: ${newParticipantSocketId} (initiator: false, Offer 대기)`);
+    webrtcServiceRef.current.initializePeer(newParticipantSocketId, false, localStreamRef.current);
+  }, []);
 
   /**
    * WebRTC 시그널 핸들러들
@@ -232,7 +211,7 @@ function useWebRTC() {
     console.log("[useWebRTC] Socket 이벤트 리스너 등록");
 
     // 이벤트 리스너 등록
-    socketService.on("room:joined", handleRoomJoined);
+    // room:joined는 pendingPeers useEffect에서 처리하므로 별도 리스너 불필요
     socketService.on("room:participant-joined", handleParticipantJoined);
     socketService.on("signal:offer", handleOffer);
     socketService.on("signal:answer", handleAnswer);
@@ -242,7 +221,6 @@ function useWebRTC() {
     // 클린업 함수
     return () => {
       console.log("[useWebRTC] Socket 이벤트 리스너 제거");
-      socketService.off("room:joined", handleRoomJoined);
       socketService.off("room:participant-joined", handleParticipantJoined);
       socketService.off("signal:offer", handleOffer);
       socketService.off("signal:answer", handleAnswer);
@@ -252,7 +230,6 @@ function useWebRTC() {
   }, [
     socketService,
     roomId,
-    handleRoomJoined,
     handleParticipantJoined,
     handleOffer,
     handleAnswer,
