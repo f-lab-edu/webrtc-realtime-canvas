@@ -7,7 +7,7 @@ import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import NicknameInput from "@/components/room/NicknameInput";
 import SettingsPanel from "@/components/room/SettingsPanel";
-import VideoStack from "@/components/room/VideoStack";
+import VideoGrid from "@/components/room/VideoGrid";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
@@ -32,11 +32,23 @@ export default function RoomPage() {
   const router = useRouter();
 
   // Context 및 Hooks
-  const { joinRoom, leaveRoom, isConnected, showChat, toggleChat, setNickname } = useRoomContext();
+  const {
+    joinRoom,
+    leaveRoom,
+    isConnected,
+    showChat,
+    toggleChat,
+    setNickname,
+    participantNicknames,
+    hostSocketId,
+    socketService,
+  } = useRoomContext();
   const {
     localStream,
     remoteStream,
+    remoteStreams,
     isVideoEnabled,
+    isScreenSharing,
     setParticipationMode,
     initializeMedia,
     cleanupMedia,
@@ -225,12 +237,16 @@ export default function RoomPage() {
 
       {/* 메인 컨텐츠: 3컬럼 레이아웃 (3:5:2 비율) */}
       <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
-        {/* 왼쪽: 비디오 스택 (30%) */}
+        {/* 왼쪽: 비디오 그리드 (30%) */}
         <aside className="flex-[3] flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
-          <VideoStack
+          <VideoGrid
             localStream={localStream}
-            remoteStream={remoteStream}
+            remoteStreams={remoteStreams}
             isVideoEnabled={isVideoEnabled}
+            isScreenSharing={isScreenSharing}
+            participantNicknames={participantNicknames}
+            hostSocketId={hostSocketId}
+            mySocketId={socketService?.socket?.id}
           />
         </aside>
 

@@ -16,7 +16,7 @@ const WhiteboardContext = createContext(null);
  */
 export function WhiteboardProvider({ children }) {
   // Context에서 필요한 값 가져오기
-  const { socketService, roomId, isConnected } = useRoomContext();
+  const { socketService, roomId, isConnected, isHost } = useRoomContext();
 
   // WhiteboardService 인스턴스 (전역 단일 인스턴스)
   const whiteboardServiceRef = useRef(null);
@@ -47,7 +47,8 @@ export function WhiteboardProvider({ children }) {
   }, [socketService, roomId, isConnected]);
 
   /**
-   * 화이트보드 캔버스 초기화
+   * 화이트보드 캔버스 초기화 (1회만 수행)
+   * 그리기 모드는 별도 useEffect에서 isHost 변경 시 토글
    * @param {HTMLCanvasElement} canvasElement - HTML canvas 엘리먼트
    * @param {Object} options - 캔버스 옵션
    */
@@ -57,16 +58,23 @@ export function WhiteboardProvider({ children }) {
       return;
     }
 
+    const whiteboardService = whiteboardServiceRef.current;
+
+    // 이미 초기화된 캔버스가 있으면 스킵 (dispose/재생성 방지)
+    if (whiteboardService?.canvas) {
+      console.log("[initializeWhiteboard] 이미 초기화된 캔버스 존재, 스킵");
+      return;
+    }
+
     try {
       console.log("화이트보드 초기화 시작");
-      const whiteboardService = whiteboardServiceRef.current;
 
       console.log("[initializeWhiteboard] WhiteboardService 상태:", {
         hasService: !!whiteboardService,
-        hasCanvas: !!whiteboardService?.canvas,
+        hasCanvas: false,
       });
 
-      // 캔버스 초기화 (중복 초기화 방지는 WhiteboardService에서 처리)
+      // 캔버스 초기화만 수행 (그리기 모드는 별도 useEffect에서 처리)
       whiteboardService.initialize(canvasElement, options);
 
       console.log("[initializeWhiteboard] 초기화 후 상태:", {
@@ -74,6 +82,27 @@ export function WhiteboardProvider({ children }) {
         canvasType: whiteboardService.canvas?.constructor?.name,
       });
 
+      canvasRef.current = canvasElement;
+      setIsInitialized(true);
+      console.log("화이트보드 초기화 완료");
+    } catch (error) {
+      console.error("화이트보드 초기화 에러:", error);
+    }
+  }, []); // 의존성 없음 - 캔버스 초기화는 1회만
+
+  /**
+   * isHost 변경 시 그리기 모드 토글
+   * 캔버스 재초기화 없이 그리기 모드만 변경
+   */
+  useEffect(() => {
+    const whiteboardService = whiteboardServiceRef.current;
+
+    if (!whiteboardService?.canvas || !isInitialized) {
+      return;
+    }
+
+    if (isHost) {
+      console.log("호스트 권한: 그리기 모드 활성화");
       // 그리기 이벤트 핸들러 등록
       whiteboardService.enableDrawing((eventData) => {
         // ref를 통해 최신 값 참조
@@ -103,15 +132,13 @@ export function WhiteboardProvider({ children }) {
           });
         }
       });
-
-      canvasRef.current = canvasElement;
-      setIsInitialized(true);
       setIsDrawing(true);
-      console.log("화이트보드 초기화 완료");
-    } catch (error) {
-      console.error("화이트보드 초기화 에러:", error);
+    } else {
+      console.log("비호스트: 그리기 모드 비활성화 (읽기 전용)");
+      whiteboardService.disableDrawing();
+      setIsDrawing(false);
     }
-  }, []);
+  }, [isHost, isInitialized]);
 
   /**
    * 원격 그리기 이벤트 적용
@@ -288,8 +315,22 @@ export function WhiteboardProvider({ children }) {
       applyRemoteEvent(data.event);
     };
 
+    // 화이트보드 권한 거부 이벤트 수신
+    const handleWhiteboardDenied = (data) => {
+      console.warn("[WhiteboardProvider] 화이트보드 권한 거부:", data.message);
+      alert(`화이트보드 권한이 거부되었습니다: ${data.message || "호스트 권한이 필요합니다."}`);
+
+      // 비호스트 사용자의 그리기 시도를 비활성화
+      const whiteboardService = whiteboardServiceRef.current;
+      if (whiteboardService) {
+        whiteboardService.disableDrawing();
+        setIsDrawing(false);
+      }
+    };
+
     // 이벤트 리스너 등록
     socketService.on("whiteboard:event", handleWhiteboardEvent);
+    socketService.on("whiteboard:denied", handleWhiteboardDenied);
 
     // 클린업 함수
     return () => {
@@ -298,6 +339,7 @@ export function WhiteboardProvider({ children }) {
       // Socket이 정리되지 않은 경우에만 이벤트 리스너 제거
       if (socketService?.socket) {
         socketService.off("whiteboard:event", handleWhiteboardEvent);
+        socketService.off("whiteboard:denied", handleWhiteboardDenied);
       } else {
         console.log("[WhiteboardProvider] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
       }

@@ -1,42 +1,314 @@
 /**
  * RoomManager 클래스
  * 방 생성, 조회, 참가자 관리를 담당하는 클래스
+ * P2P Mesh 다중 참가자 지원 (최대 6명)
  */
 import { roomIdSchema, socketIdSchema } from "../schemas/socketSchemas.js";
 
 class RoomManager {
-  constructor() {
+  constructor(defaultMaxParticipants = 6) {
     // 메모리 기반 방 관리 (Map 사용)
-    this.rooms = new Map();
+    this.rooms = new Map(); // roomId → { participants: Set, maxParticipants, hostSocketId, ... }
+    this.socketToRoom = new Map(); // socketId → roomId (빠른 조회를 위한 역방향 맵)
+    this.nicknames = new Map(); // socketId → nickname (전역 닉네임 관리)
+    this.defaultMaxParticipants = defaultMaxParticipants;
   }
 
   /**
    * 방 생성
    * @param {string} roomId - 방 고유 식별자
-   * @returns {Object} 생성된 방 객체
+   * @param {string} socketId - 방 생성자 소켓 ID (호스트)
+   * @param {string} nickname - 호스트 닉네임
+   * @param {number|null} maxParticipants - 최대 참가자 수 (선택)
+   * @returns {Object} 생성 결과 { success, reason? }
    */
-  createRoom(roomId) {
+  createRoom(roomId, socketId, nickname, maxParticipants = null) {
     // Zod로 파라미터 검증
     const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
 
     // 이미 존재하는 방인지 확인
     if (this.rooms.has(validatedRoomId)) {
-      return this.rooms.get(validatedRoomId);
+      console.warn(`[RoomManager] 이미 존재하는 방: ${validatedRoomId}`);
+      return { success: false, reason: "ALREADY_EXISTS" };
     }
 
     // 새 방 생성
     const room = {
-      id: validatedRoomId,
-      participants: new Set(),
-      participantNicknames: new Map(),
-      createdAt: new Date(),
-      maxParticipants: 2,
+      participants: new Set([validatedSocketId]),
+      maxParticipants: maxParticipants || this.defaultMaxParticipants,
+      createdAt: Date.now(),
+      hostSocketId: validatedSocketId, // 방 생성자가 호스트
+      screenSharePermissions: new Set([validatedSocketId]), // 호스트는 기본적으로 화면 공유 권한 보유
     };
 
     this.rooms.set(validatedRoomId, room);
-    console.log(`방 생성됨: ${validatedRoomId}`);
+    this.socketToRoom.set(validatedSocketId, validatedRoomId);
+    this.nicknames.set(validatedSocketId, nickname);
 
-    return room;
+    console.log(
+      `[RoomManager] 방 생성: ${validatedRoomId}, 호스트: ${validatedSocketId}, 최대 인원: ${room.maxParticipants}`
+    );
+
+    return { success: true };
+  }
+
+  /**
+   * 방 참가
+   * @param {string} roomId - 방 고유 식별자
+   * @param {string} socketId - 참가자 소켓 ID
+   * @param {string} nickname - 참가자 닉네임
+   * @param {number|null} maxParticipants - 최대 참가자 수 (방 생성 시에만 사용)
+   * @returns {Object} 참가 결과 { success, participants?, reason?, currentSize?, maxSize? }
+   */
+  joinRoom(roomId, socketId, nickname, maxParticipants = null) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    // 방이 없으면 생성
+    if (!this.rooms.has(validatedRoomId)) {
+      const createResult = this.createRoom(
+        validatedRoomId,
+        validatedSocketId,
+        nickname,
+        maxParticipants
+      );
+
+      if (createResult.success) {
+        // 방 생성 성공 시 빈 기존 참가자 목록 반환
+        return {
+          success: true,
+          participants: [],
+        };
+      }
+
+      return createResult;
+    }
+
+    const room = this.rooms.get(validatedRoomId);
+
+    // 정원 체크
+    if (room.participants.size >= room.maxParticipants) {
+      console.warn(
+        `[RoomManager] 방 정원 초과: ${validatedRoomId} (${room.participants.size}/${room.maxParticipants})`
+      );
+      return {
+        success: false,
+        reason: "ROOM_FULL",
+        currentSize: room.participants.size,
+        maxSize: room.maxParticipants,
+      };
+    }
+
+    // 참가자 추가
+    room.participants.add(validatedSocketId);
+    this.socketToRoom.set(validatedSocketId, validatedRoomId);
+    this.nicknames.set(validatedSocketId, nickname);
+
+    console.log(
+      `[RoomManager] 참가자 추가: ${validatedRoomId} (${room.participants.size}/${room.maxParticipants})`
+    );
+
+    // 기존 참가자 목록 반환 (자신 제외)
+    const existingParticipants = Array.from(room.participants).filter(
+      (id) => id !== validatedSocketId
+    );
+
+    return {
+      success: true,
+      participants: existingParticipants,
+    };
+  }
+
+  /**
+   * 방 퇴장 (원자적 처리 - 호스트 승계 포함)
+   *
+   * ⚠️ Critical Fix: 호스트 승계 로직을 내부에 캡슐화하여 원자성 보장
+   * - Node.js 싱글 스레드 특성을 활용하여 동시성 문제 해결
+   * - getNextParticipant()와 transferHost() 사이의 race condition 방지
+   *
+   * @param {string} socketId - 퇴장할 소켓 ID
+   * @returns {Object|null} 퇴장 결과 { roomId, wasHost, newHostId, remainingParticipants }
+   */
+  leaveRoom(socketId) {
+    // Zod로 파라미터 검증
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    const roomId = this.socketToRoom.get(validatedSocketId);
+
+    if (!roomId) {
+      console.warn(`[RoomManager] 참가하지 않은 사용자: ${validatedSocketId}`);
+      return null;
+    }
+
+    const room = this.rooms.get(roomId);
+
+    if (!room) {
+      this.socketToRoom.delete(validatedSocketId);
+      this.nicknames.delete(validatedSocketId);
+      return null;
+    }
+
+    // 1. 호스트 여부 확인 (퇴장 전에 저장)
+    const wasHost = room.hostSocketId === validatedSocketId;
+
+    // 2. 참가자 제거 (동기적)
+    room.participants.delete(validatedSocketId);
+    room.screenSharePermissions.delete(validatedSocketId);
+    this.socketToRoom.delete(validatedSocketId);
+    this.nicknames.delete(validatedSocketId);
+
+    console.log(`[RoomManager] 참가자 퇴장: ${roomId} (남은 인원: ${room.participants.size})`);
+
+    // 3. 호스트 승계 (동기적, 원자적)
+    let newHostId = null;
+    if (wasHost && room.participants.size > 0) {
+      // 남은 참가자 중 첫 번째를 새 호스트로 선택
+      newHostId = room.participants.keys().next().value;
+      room.hostSocketId = newHostId;
+      // 새 호스트에게 자동으로 화면 공유 권한 부여
+      room.screenSharePermissions.add(newHostId);
+      console.log(`[RoomManager] 호스트 승계: ${validatedSocketId} → ${newHostId}`);
+    }
+
+    // 4. 빈 방 정리
+    const remainingParticipants = Array.from(room.participants);
+    if (room.participants.size === 0) {
+      this.rooms.delete(roomId);
+      console.log(`[RoomManager] 빈 방 삭제: ${roomId}`);
+    }
+
+    // 원자적 처리 결과 반환
+    return {
+      roomId,
+      wasHost,
+      newHostId,
+      remainingParticipants,
+    };
+  }
+
+  /**
+   * 호스트 Socket ID 조회
+   * @param {string} roomId - 방 ID
+   * @returns {string|null} 호스트 Socket ID 또는 null
+   */
+  getHost(roomId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+
+    const room = this.rooms.get(validatedRoomId);
+    return room ? room.hostSocketId : null;
+  }
+
+  /**
+   * 호스트 권한 이전 (수동 호출용 - leaveRoom은 자동 처리)
+   * @param {string} roomId - 방 ID
+   * @param {string} newHostSocketId - 새 호스트 Socket ID
+   * @returns {Object} 결과 { success, reason?, oldHost?, newHost? }
+   */
+  transferHost(roomId, newHostSocketId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(newHostSocketId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      console.warn(`[RoomManager] 방을 찾을 수 없음: ${validatedRoomId}`);
+      return { success: false, reason: "ROOM_NOT_FOUND" };
+    }
+
+    if (!room.participants.has(validatedSocketId)) {
+      console.warn(`[RoomManager] 새 호스트가 방에 없음: ${validatedSocketId}`);
+      return { success: false, reason: "PARTICIPANT_NOT_FOUND" };
+    }
+
+    const oldHost = room.hostSocketId;
+    room.hostSocketId = validatedSocketId;
+
+    // 새 호스트에게 자동으로 화면 공유 권한 부여
+    room.screenSharePermissions.add(validatedSocketId);
+
+    console.log(`[RoomManager] 호스트 이전: ${validatedRoomId}, ${oldHost} → ${validatedSocketId}`);
+
+    return { success: true, oldHost, newHost: validatedSocketId };
+  }
+
+  /**
+   * 화면 공유 권한 부여
+   * @param {string} roomId - 방 ID
+   * @param {string} socketId - 권한을 부여할 Socket ID
+   * @returns {Object} 결과 { success, reason? }
+   */
+  grantScreenSharePermission(roomId, socketId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      return { success: false, reason: "ROOM_NOT_FOUND" };
+    }
+
+    if (!room.participants.has(validatedSocketId)) {
+      return { success: false, reason: "PARTICIPANT_NOT_FOUND" };
+    }
+
+    room.screenSharePermissions.add(validatedSocketId);
+    console.log(`[RoomManager] 화면 공유 권한 부여: ${validatedRoomId}, ${validatedSocketId}`);
+
+    return { success: true };
+  }
+
+  /**
+   * 화면 공유 권한 회수
+   * @param {string} roomId - 방 ID
+   * @param {string} socketId - 권한을 회수할 Socket ID
+   * @returns {Object} 결과 { success, reason? }
+   */
+  revokeScreenSharePermission(roomId, socketId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      return { success: false, reason: "ROOM_NOT_FOUND" };
+    }
+
+    // 호스트의 권한은 회수할 수 없음
+    if (validatedSocketId === room.hostSocketId) {
+      console.warn(`[RoomManager] 호스트의 권한은 회수할 수 없음: ${validatedSocketId}`);
+      return { success: false, reason: "CANNOT_REVOKE_HOST_PERMISSION" };
+    }
+
+    room.screenSharePermissions.delete(validatedSocketId);
+    console.log(`[RoomManager] 화면 공유 권한 회수: ${validatedRoomId}, ${validatedSocketId}`);
+
+    return { success: true };
+  }
+
+  /**
+   * 화면 공유 권한 확인
+   * @param {string} roomId - 방 ID
+   * @param {string} socketId - 확인할 Socket ID
+   * @returns {boolean} 권한 보유 여부
+   */
+  hasScreenSharePermission(roomId, socketId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(socketId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      return false;
+    }
+
+    return room.screenSharePermissions.has(validatedSocketId);
   }
 
   /**
@@ -52,73 +324,30 @@ class RoomManager {
   }
 
   /**
-   * 참가자 추가
-   * @param {string} roomId - 방 고유 식별자
-   * @param {string} socketId - 참가자 소켓 ID
-   * @returns {boolean} 추가 성공 여부
+   * 방 정보 조회 (상세 정보 포함)
+   * @param {string} roomId - 방 ID
+   * @returns {Object|null} 방 정보 객체 또는 null
    */
-  addParticipant(roomId, socketId) {
+  getRoomInfo(roomId) {
     // Zod로 파라미터 검증
     const validatedRoomId = roomIdSchema.parse(roomId);
-    const validatedSocketId = socketIdSchema.parse(socketId);
 
-    // 방이 존재하지 않으면 생성
-    let room = this.getRoom(validatedRoomId);
+    const room = this.rooms.get(validatedRoomId);
+
     if (!room) {
-      room = this.createRoom(validatedRoomId);
+      return null;
     }
 
-    // 방 정원 체크 (최대 2명)
-    if (this.isRoomFull(validatedRoomId)) {
-      console.log(`방 정원 초과: ${validatedRoomId}, 현재 인원: ${room.participants.size}`);
-      return false;
-    }
-
-    // 참가자 추가
-    room.participants.add(validatedSocketId);
-    console.log(
-      `참가자 추가됨: ${validatedSocketId} -> 방: ${validatedRoomId}, 현재 인원: ${room.participants.size}`
-    );
-
-    return true;
-  }
-
-  /**
-   * 참가자 제거
-   * @param {string} roomId - 방 고유 식별자
-   * @param {string} socketId - 참가자 소켓 ID
-   * @returns {boolean} 제거 성공 여부
-   */
-  removeParticipant(roomId, socketId) {
-    // Zod로 파라미터 검증
-    const validatedRoomId = roomIdSchema.parse(roomId);
-    const validatedSocketId = socketIdSchema.parse(socketId);
-
-    const room = this.getRoom(validatedRoomId);
-    if (!room) {
-      console.log(`방을 찾을 수 없음: ${validatedRoomId}`);
-      return false;
-    }
-
-    // 참가자 제거
-    const removed = room.participants.delete(validatedSocketId);
-
-    if (removed) {
-      // 닉네임도 함께 삭제
-      room.participantNicknames.delete(validatedSocketId);
-
-      console.log(
-        `참가자 제거됨: ${validatedSocketId} <- 방: ${validatedRoomId}, 남은 인원: ${room.participants.size}`
-      );
-
-      // 방이 비어있으면 방 삭제
-      if (room.participants.size === 0) {
-        this.rooms.delete(validatedRoomId);
-        console.log(`빈 방 삭제됨: ${validatedRoomId}`);
-      }
-    }
-
-    return removed;
+    return {
+      roomId: validatedRoomId,
+      currentSize: room.participants.size,
+      maxSize: room.maxParticipants,
+      participants: Array.from(room.participants),
+      nicknames: this.getRoomNicknames(validatedRoomId),
+      createdAt: room.createdAt,
+      hostSocketId: room.hostSocketId,
+      screenSharePermissions: Array.from(room.screenSharePermissions),
+    };
   }
 
   /**
@@ -136,6 +365,26 @@ class RoomManager {
     }
 
     return Array.from(room.participants);
+  }
+
+  /**
+   * 특정 방의 다른 참가자들 조회
+   * @param {string} roomId - 방 ID
+   * @param {string} excludeSocketId - 제외할 Socket ID
+   * @returns {Array} 다른 참가자 소켓 ID 배열
+   */
+  getOtherParticipants(roomId, excludeSocketId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+    const validatedSocketId = socketIdSchema.parse(excludeSocketId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      return [];
+    }
+
+    return Array.from(room.participants).filter((id) => id !== validatedSocketId);
   }
 
   /**
@@ -180,64 +429,20 @@ class RoomManager {
     // Zod로 파라미터 검증
     const validatedSocketId = socketIdSchema.parse(socketId);
 
-    for (const [roomId, room] of this.rooms.entries()) {
-      if (room.participants.has(validatedSocketId)) {
-        return roomId;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * 참가자 활동 시간 업데이트
-   * @param {string} socketId - 참가자 소켓 ID
-   */
-  updateParticipantActivity(socketId) {
-    // Zod로 파라미터 검증
-    const validatedSocketId = socketIdSchema.parse(socketId);
-
-    // 해당 소켓이 속한 방 찾기
-    const roomId = this.getRoomIdBySocketId(validatedSocketId);
-    if (!roomId) {
-      console.log(`참가자 ${validatedSocketId}가 속한 방을 찾을 수 없습니다`);
-      return;
-    }
-
-    const room = this.getRoom(roomId);
-    if (!room) {
-      return;
-    }
-
-    // 참가자 활동 시간 업데이트 (향후 비활성 참가자 정리에 사용 가능)
-    if (!room.participantActivity) {
-      room.participantActivity = new Map();
-    }
-
-    room.participantActivity.set(validatedSocketId, new Date());
-    console.log(`참가자 ${validatedSocketId} 활동 시간 업데이트`);
+    return this.socketToRoom.get(validatedSocketId) || null;
   }
 
   /**
    * 참가자 닉네임 설정
-   * @param {string} roomId - 방 고유 식별자
    * @param {string} socketId - 참가자 소켓 ID
    * @param {string} nickname - 닉네임
    */
-  setParticipantNickname(roomId, socketId, nickname) {
+  setParticipantNickname(socketId, nickname) {
     // Zod로 파라미터 검증
-    const validatedRoomId = roomIdSchema.parse(roomId);
     const validatedSocketId = socketIdSchema.parse(socketId);
 
-    const room = this.getRoom(validatedRoomId);
-    if (!room) {
-      console.log(`방을 찾을 수 없음: ${validatedRoomId}`);
-      return;
-    }
-
-    // 닉네임 저장
-    room.participantNicknames.set(validatedSocketId, nickname);
-    console.log(`닉네임 설정됨: ${validatedSocketId} -> "${nickname}" (방: ${validatedRoomId})`);
+    this.nicknames.set(validatedSocketId, nickname);
+    console.log(`[RoomManager] 닉네임 설정: ${validatedSocketId} → "${nickname}"`);
   }
 
   /**
@@ -249,18 +454,34 @@ class RoomManager {
     // Zod로 파라미터 검증
     const validatedSocketId = socketIdSchema.parse(socketId);
 
-    // 해당 소켓이 속한 방 찾기
-    for (const room of this.rooms.values()) {
-      if (room.participants.has(validatedSocketId)) {
-        return room.participantNicknames.get(validatedSocketId) || null;
-      }
-    }
-
-    return null;
+    return this.nicknames.get(validatedSocketId) || null;
   }
 
   /**
-   * 방의 모든 참가자 닉네임 조회
+   * 특정 방의 모든 참가자 닉네임 조회
+   * @param {string} roomId - 방 ID
+   * @returns {Object} { socketId: nickname } 형태의 객체
+   */
+  getRoomNicknames(roomId) {
+    // Zod로 파라미터 검증
+    const validatedRoomId = roomIdSchema.parse(roomId);
+
+    const room = this.rooms.get(validatedRoomId);
+
+    if (!room) {
+      return {};
+    }
+
+    const nicknames = {};
+    for (const socketId of room.participants) {
+      nicknames[socketId] = this.nicknames.get(socketId) || "익명";
+    }
+
+    return nicknames;
+  }
+
+  /**
+   * 방의 모든 참가자 닉네임 조회 (Map 반환)
    * @param {string} roomId - 방 고유 식별자
    * @returns {Map<socketId, nickname>} 참가자 닉네임 맵
    */
@@ -273,7 +494,13 @@ class RoomManager {
       return new Map();
     }
 
-    return new Map(room.participantNicknames);
+    const nicknamesMap = new Map();
+    for (const socketId of room.participants) {
+      const nickname = this.nicknames.get(socketId) || "익명";
+      nicknamesMap.set(socketId, nickname);
+    }
+
+    return nicknamesMap;
   }
 
   /**
@@ -281,7 +508,9 @@ class RoomManager {
    */
   cleanup() {
     this.rooms.clear();
-    console.log("RoomManager 리소스 정리 완료");
+    this.socketToRoom.clear();
+    this.nicknames.clear();
+    console.log("[RoomManager] 리소스 정리 완료");
   }
 }
 

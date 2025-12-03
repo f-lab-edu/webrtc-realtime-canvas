@@ -14,7 +14,8 @@ import { useRoomContext } from "@/contexts/RoomContext";
  */
 export default function ControlBar({ onSettingsClick }) {
   const router = useRouter();
-  const { leaveRoom } = useRoomContext();
+  const { leaveRoom, isHost, hasScreenSharePermission, requestScreenSharePermission } =
+    useRoomContext();
   const {
     isVideoEnabled,
     isAudioEnabled,
@@ -51,16 +52,28 @@ export default function ControlBar({ onSettingsClick }) {
 
   /**
    * 화면 공유 토글 핸들러
+   * 권한 체크: 호스트이거나 권한을 부여받은 경우에만 화면 공유 가능
    */
   const handleToggleScreenShare = async () => {
     try {
       if (isScreenSharing) {
+        // 화면 공유 중지는 언제나 가능
         stopScreenShare();
       } else {
+        // 화면 공유 시작: 권한 체크
+        if (!isHost && !hasScreenSharePermission) {
+          // 권한 없음: 호스트에게 권한 요청
+          console.log("[ControlBar] 화면 공유 권한 없음 - 권한 요청");
+          requestScreenSharePermission();
+          alert("화면 공유 권한이 필요합니다. 호스트에게 요청을 보냈습니다.");
+          return;
+        }
+
+        // 권한 있음: 화면 공유 시작
         await startScreenShare();
       }
     } catch (error) {
-      console.error("화면 공유 토글 에러:", error);
+      console.error("[ControlBar] 화면 공유 토글 에러:", error);
     }
   };
 
@@ -94,7 +107,14 @@ export default function ControlBar({ onSettingsClick }) {
         size="lg"
         onClick={handleToggleScreenShare}
         className="w-14 h-14 rounded-full"
-        title={isScreenSharing ? "화면 공유 중지" : "화면 공유"}
+        title={
+          isScreenSharing
+            ? "화면 공유 중지"
+            : isHost || hasScreenSharePermission
+              ? "화면 공유"
+              : "화면 공유 (권한 필요)"
+        }
+        disabled={!isScreenSharing && !isHost && !hasScreenSharePermission}
       >
         <span className="text-xl">{isScreenSharing ? "🖥️✓" : "🖥️"}</span>
       </Button>

@@ -2,93 +2,46 @@ import SimplePeer from "simple-peer";
 
 /**
  * WebRTCService 클래스
- * SimplePeer를 사용한 WebRTC P2P 연결 관리
+ * SimplePeer를 사용한 WebRTC P2P Mesh 연결 관리
  *
+ * P2P Mesh 아키텍처:
+ * - 각 참가자는 다른 모든 참가자와 1:1 Peer 연결을 맺음
+ * - peers Map으로 다중 Peer 인스턴스 관리 (Map<socketId, SimplePeer>)
+ * - pendingSignals Map으로 Early Candidates 문제 해결
  */
 class WebRTCService {
   constructor() {
-    this.peer = null;
+    // P2P Mesh를 위한 다중 Peer 관리
+    this.peers = new Map(); // Map<socketId, SimplePeer>
+    this.pendingSignals = new Map(); // Map<socketId, Signal[]> - Early Candidates 문제 해결
+
     this.localStream = null;
-    this.remoteStream = null;
-    this.isInitiator = false;
 
-    // 이벤트 핸들러 저장
+    // 이벤트 핸들러 저장 (각 socketId별로 호출됨)
     this.handlers = {
-      signal: null,
-      stream: null,
-      error: null,
-      close: null,
-      connect: null,
+      signal: null, // (socketId, signal) => void
+      stream: null, // (socketId, stream) => void
+      error: null, // (socketId, error) => void
+      close: null, // (socketId) => void
+      connect: null, // (socketId) => void
+      iceStateChange: null, // (socketId, state) => void - High priority
     };
-
-    // 재연결 메커니즘을 위한 속성
-    this.socketService = null; // 소켓 서비스 인스턴스
-    this.targetSocketId = null; // 대상 소켓 ID
-    this.isReconnecting = false; // 재연결 진행 중 플래그
   }
 
   /**
-   * 재연결 설정
-   * 디바이스 변경 시 재연결을 위해 socketService와 targetSocketId를 설정
-   *
-   * @param {Object} socketService - SocketService 인스턴스
-   * @param {string} targetSocketId - 대상 소켓 ID
-   * @param {boolean} isReconnecting - 재연결 진행 중 플래그
-   */
-  setReconnectionConfig(socketService, targetSocketId, isReconnecting = true) {
-    this.socketService = socketService;
-    this.targetSocketId = targetSocketId;
-    this.isReconnecting = isReconnecting;
-
-    console.log(`[WebRTCService] 재연결 설정 완료`);
-    console.log(`   - targetSocketId: ${targetSocketId}`);
-    console.log(`   - isReconnecting: ${isReconnecting}`);
-  }
-
-  /**
-   * 재연결 플래그 초기화
-   */
-  clearReconnectionFlag() {
-    this.isReconnecting = false;
-    console.log(`[WebRTCService] 재연결 플래그 초기화`);
-  }
-
-  /**
-   * 재연결 완료 처리
-   * Peer 연결 성공 시 호출되며, 재연결 중이면 media:reconnected 이벤트 emit
-   */
-  handleReconnectionComplete() {
-    if (this.isReconnecting && this.socketService && this.targetSocketId) {
-      console.log(`\n========== [WebRTCService] 재연결 완료 알림 ==========`);
-      console.log(`⏰ 타임스탬프: ${new Date().toISOString()}`);
-      console.log(`📡 media:reconnected 이벤트 emit`);
-      console.log(`   - 대상: ${this.targetSocketId}`);
-
-      try {
-        this.socketService.emit("media:reconnected", {
-          to: this.targetSocketId,
-        });
-        console.log(`✅ media:reconnected 이벤트 전송 완료`);
-      } catch (error) {
-        console.error(`❌ media:reconnected 이벤트 전송 실패:`, error);
-      }
-
-      // 재연결 플래그 초기화
-      this.isReconnecting = false;
-
-      console.log(`========== [WebRTCService] 재연결 완료 알림 종료 ==========\n`);
-    }
-  }
-
-  /**
-   * SimplePeer 인스턴스 초기화
+   * 특정 참가자와의 Peer 연결 초기화
+   * @param {string} socketId - 연결할 상대방의 소켓 ID
    * @param {boolean} initiator - offer를 생성하는 측인지 여부
    * @param {MediaStream|null} stream - 로컬 미디어 스트림 (optional, 시청자 모드면 null 가능)
    * @param {Object} config - STUN/TURN 서버 설정 (선택적)
    */
-  initialize(initiator, stream, config = {}) {
+  initializePeer(socketId, initiator, stream, config = {}) {
     try {
-      this.isInitiator = initiator;
+      // 이미 존재하는 Peer는 정리
+      if (this.peers.has(socketId)) {
+        console.warn(`[WebRTCService] 기존 Peer 존재 (${socketId}), 재생성`);
+        this.removePeer(socketId);
+      }
 
       // stream이 null이면 빈 MediaStream 생성 (시청자 모드 지원)
       if (!stream) {
@@ -136,27 +89,28 @@ class WebRTCService {
       const videoTracks = this.localStream.getVideoTracks();
       const hasStream = stream !== null;
 
-      console.log(`WebRTC 초기화 - 로컬 스트림 트랙 (hasStream: ${hasStream}):`);
+      console.log(`[WebRTCService] Peer 초기화 - ${socketId} (hasStream: ${hasStream})`);
+      console.log(`   - initiator: ${initiator}`);
       console.log(
-        `- 비디오: ${videoTracks.length}개`,
+        `   - 비디오: ${videoTracks.length}개`,
         videoTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
       );
       console.log(
-        `- 오디오: ${audioTracks.length}개`,
+        `   - 오디오: ${audioTracks.length}개`,
         audioTracks.map((t) => `${t.label} (enabled: ${t.enabled})`)
       );
 
       if (!hasStream) {
-        console.log("ℹ️ [WebRTCService] 시청자 모드로 WebRTC 연결 시작 (빈 스트림)");
+        console.log(`ℹ️ [WebRTCService] 시청자 모드로 WebRTC 연결 시작 (빈 스트림)`);
       }
 
       // 개발 환경 체크
       const isDevelopment = process.env.NODE_ENV === "development";
 
       // SimplePeer 인스턴스 생성
-      this.peer = new SimplePeer({
+      const peer = new SimplePeer({
         initiator,
-        stream: this.localStream, // 빈 MediaStream 또는 실제 스트림
+        stream: this.localStream,
         // 개발 환경: trickle false (안정성 우선)
         // 프로덕션: trickle true (성능 우선)
         trickle: !isDevelopment,
@@ -164,112 +118,108 @@ class WebRTCService {
       });
 
       console.log(
-        `WebRTC 초기화 - 환경: ${isDevelopment ? "개발" : "프로덕션"}, trickle: ${!isDevelopment}`
+        `[WebRTCService] SimplePeer 생성 완료 - 환경: ${isDevelopment ? "개발" : "프로덕션"}, trickle: ${!isDevelopment}`
       );
 
-      // peer.on('signal') 첫 호출 시 ICE/Connection 모니터링 설정
+      // peers Map에 저장
+      this.peers.set(socketId, peer);
+
+      // ICE/Connection 상태 모니터링 설정 플래그
       let isMonitoringSetup = false;
 
       // 시그널 이벤트 (SDP offer/answer, ICE candidate)
-      this.peer.on("signal", (signal) => {
-        console.log("WebRTC 시그널 생성:", signal.type || "candidate");
+      peer.on("signal", (signal) => {
+        console.log(`[WebRTCService] 시그널 생성 - ${socketId}:`, signal.type || "candidate");
 
         // 첫 signal 이벤트 시 _pc 모니터링 설정
-        if (!isMonitoringSetup && this.peer._pc) {
-          console.log("🎯 [WebRTCService] 첫 signal 이벤트, ICE/Connection 모니터링 설정 시작");
+        if (!isMonitoringSetup && peer._pc) {
+          console.log(`🎯 [WebRTCService] ${socketId} ICE/Connection 모니터링 설정 시작`);
 
           // ICE Connection State 모니터링
-          this.peer._pc.oniceconnectionstatechange = () => {
-            const state = this.peer._pc.iceConnectionState;
-            console.log(`🧊 [WebRTCService] ICE Connection State: ${state}`);
+          peer._pc.oniceconnectionstatechange = () => {
+            const state = peer._pc.iceConnectionState;
+            console.log(`🧊 [WebRTCService] ${socketId} ICE Connection State: ${state}`);
+
+            // iceStateChange 핸들러 호출 (High priority)
+            if (this.handlers.iceStateChange) {
+              this.handlers.iceStateChange(socketId, state);
+            }
 
             if (state === "failed") {
-              console.error("❌ ICE Connection Failed - TURN 서버 필요할 수 있음");
+              console.error(
+                `❌ [WebRTCService] ${socketId} ICE Connection Failed - TURN 서버 필요할 수 있음`
+              );
             }
           };
 
-          // RTCPeerConnection State 모니터링 (이중 안전장치)
-          this.peer._pc.onconnectionstatechange = () => {
-            const state = this.peer._pc.connectionState;
-            console.log(`🔗 [WebRTCService] RTCPeerConnection State: ${state}`);
+          // RTCPeerConnection State 모니터링
+          peer._pc.onconnectionstatechange = () => {
+            const state = peer._pc.connectionState;
+            console.log(`🔗 [WebRTCService] ${socketId} RTCPeerConnection State: ${state}`);
 
             if (state === "connected") {
-              console.log("✅ Peer Connection Established");
-
-              // 재연결 완료 처리 (media:reconnected 이벤트 emit)
-              this.handleReconnectionComplete();
-
-              // RTCPeerConnection이 connected 상태가 되면
-              // peer.on('connect')와 동일하게 처리 (이중 안전장치)
-              console.log("🎬 [WebRTCService] RTCPeerConnection connected, connect 핸들러 호출");
+              console.log(`✅ [WebRTCService] ${socketId} Peer Connection Established`);
 
               if (this.handlers.connect) {
-                this.handlers.connect();
+                console.log(`🎬 [WebRTCService] ${socketId} connect 핸들러 호출`);
+                this.handlers.connect(socketId);
               } else {
-                console.log("⚠️ [WebRTCService] connect 핸들러 미등록 (타이밍 이슈)");
+                console.log(`⚠️ [WebRTCService] ${socketId} connect 핸들러 미등록`);
               }
             }
 
             if (state === "failed" || state === "disconnected" || state === "closed") {
-              console.error(`❌ RTCPeerConnection State: ${state}`);
+              console.error(`❌ [WebRTCService] ${socketId} RTCPeerConnection State: ${state}`);
               if (this.handlers.close) {
-                this.handlers.close();
+                this.handlers.close(socketId);
               }
             }
           };
 
           isMonitoringSetup = true;
-          console.log("✅ [WebRTCService] ICE/Connection 모니터링 설정 완료");
+          console.log(`✅ [WebRTCService] ${socketId} ICE/Connection 모니터링 설정 완료`);
         }
 
-        // 기존 시그널 핸들러 호출
+        // 시그널 핸들러 호출
         if (this.handlers.signal) {
-          this.handlers.signal(signal);
+          this.handlers.signal(socketId, signal);
         }
       });
 
       // 원격 스트림 수신 이벤트
-      this.peer.on("stream", (stream) => {
-        console.log(`\n========== [WebRTCService peer.on('stream')] ==========`);
+      peer.on("stream", (stream) => {
+        console.log(`\n========== [WebRTCService] ${socketId} peer.on('stream') ==========`);
         console.log(`⏰ 타임스탬프: ${new Date().toISOString()}`);
         console.log(`🆔 Stream ID: ${stream.id}`);
-        console.log(`📊 Stream 상태:`);
-        console.log(`   - active: ${stream.active}`);
+        console.log(`📊 Stream 상태: active=${stream.active}`);
 
-        // 트랙 정보 로깅 (디버깅용)
+        // 트랙 정보 로깅
         const audioTracks = stream.getAudioTracks();
         const videoTracks = stream.getVideoTracks();
 
         console.log(`\n🎥 비디오 트랙: ${videoTracks.length}개`);
         videoTracks.forEach((t, i) => {
-          console.log(`   [${i}] ${t.label}`);
-          console.log(`       - id: ${t.id}`);
-          console.log(`       - kind: ${t.kind}`);
-          console.log(`       - enabled: ${t.enabled}`);
-          console.log(`       - muted: ${t.muted}`);
-          console.log(`       - readyState: ${t.readyState}`);
+          console.log(
+            `   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`
+          );
         });
 
         console.log(`\n🎵 오디오 트랙: ${audioTracks.length}개`);
         audioTracks.forEach((t, i) => {
-          console.log(`   [${i}] ${t.label}`);
-          console.log(`       - id: ${t.id}`);
-          console.log(`       - kind: ${t.kind}`);
-          console.log(`       - enabled: ${t.enabled}`);
-          console.log(`       - muted: ${t.muted}`);
-          console.log(`       - readyState: ${t.readyState}`);
+          console.log(
+            `   [${i}] ${t.label} (id: ${t.id}, enabled: ${t.enabled}, muted: ${t.muted})`
+          );
         });
 
         // 비디오 트랙이 muted 상태면 unmute 대기
         if (videoTracks.length > 0 && videoTracks[0].muted) {
           const videoTrack = videoTracks[0];
-          console.log(`⏳ [WebRTCService] 비디오 트랙 muted, unmute 대기 중...`);
+          console.log(`⏳ [WebRTCService] ${socketId} 비디오 트랙 muted, unmute 대기 중...`);
 
           const handleUnmute = () => {
-            console.log(`🔊 [WebRTCService] 비디오 트랙 unmute됨, React 상태 업데이트 시작`);
-            this.remoteStream = stream;
+            console.log(`🔊 [WebRTCService] ${socketId} 비디오 트랙 unmute됨, 핸들러 호출`);
             if (this.handlers.stream) {
-              this.handlers.stream(stream);
+              this.handlers.stream(socketId, stream);
             }
           };
 
@@ -278,185 +228,288 @@ class WebRTCService {
           // 3초 타임아웃
           setTimeout(() => {
             if (videoTrack.muted) {
-              console.log(`⚠️ [WebRTCService] Unmute 타임아웃 (3초), 강제 전달`);
+              console.log(`⚠️ [WebRTCService] ${socketId} Unmute 타임아웃 (3초), 강제 전달`);
               videoTrack.removeEventListener("unmute", handleUnmute);
             }
-            // 타임아웃이어도 전달 (VideoPlayer에서 처리)
-            this.remoteStream = stream;
             if (this.handlers.stream) {
-              this.handlers.stream(stream);
+              this.handlers.stream(socketId, stream);
             }
           }, 3000);
         } else {
           // 이미 unmuted이거나 비디오 트랙 없으면 즉시 전달
-          console.log(`✅ [WebRTCService] 비디오 트랙 이미 unmuted, 즉시 전달`);
-          this.remoteStream = stream;
+          console.log(`✅ [WebRTCService] ${socketId} 비디오 트랙 이미 unmuted, 즉시 전달`);
           if (this.handlers.stream) {
-            this.handlers.stream(stream);
+            this.handlers.stream(socketId, stream);
           }
         }
 
         // peer.on('stream')을 P2P 연결 완료 신호로 사용
-        // SimplePeer는 video/audio 전용 연결에서 peer.on('connect') 이벤트를 발생시키지 않음
-        // (connect 이벤트는 data channel이 있을 때만 발생)
-        console.log(`🎬 [WebRTCService] peer.on('stream') 수신 = P2P 연결 완료`);
-
-        // 재연결 완료 처리 (media:reconnected 이벤트 emit)
-        this.handleReconnectionComplete();
+        console.log(`🎬 [WebRTCService] ${socketId} peer.on('stream') 수신 = P2P 연결 완료`);
 
         if (this.handlers.connect) {
-          console.log(`✅ [WebRTCService] connect 핸들러 호출 (stream 기반)`);
-          this.handlers.connect();
+          console.log(`✅ [WebRTCService] ${socketId} connect 핸들러 호출 (stream 기반)`);
+          this.handlers.connect(socketId);
         }
 
-        console.log(`========== [WebRTCService peer.on('stream') 종료] ==========\n`);
+        console.log(`========== [WebRTCService] ${socketId} peer.on('stream') 종료 ==========\n`);
       });
 
       // 연결 성공 이벤트
-      this.peer.on("connect", () => {
-        console.log("WebRTC P2P 연결 성공");
-
-        // 재연결 완료 처리 (media:reconnected 이벤트 emit)
-        this.handleReconnectionComplete();
-
+      peer.on("connect", () => {
+        console.log(`[WebRTCService] ${socketId} WebRTC P2P 연결 성공`);
         if (this.handlers.connect) {
-          this.handlers.connect();
+          this.handlers.connect(socketId);
         }
       });
 
       // 에러 이벤트
-      this.peer.on("error", (error) => {
-        console.error("WebRTC 에러:", error);
+      peer.on("error", (error) => {
+        // User-Initiated Abort는 정상 종료로 처리 (에러가 아님)
+        const errorMessage = error?.message || error?.toString() || "";
+        const isNormalClose =
+          errorMessage.includes("User-Initiated Abort") || errorMessage.includes("Close called");
+
+        if (isNormalClose) {
+          console.log(`[WebRTCService] ${socketId} 정상 연결 종료 (User-Initiated)`);
+        } else {
+          console.error(`[WebRTCService] ${socketId} WebRTC 에러:`, error);
+        }
+
+        // 핸들러 호출 시에도 정상 종료 여부 전달
         if (this.handlers.error) {
-          this.handlers.error(error);
+          this.handlers.error(socketId, error, isNormalClose);
         }
       });
 
       // 연결 종료 이벤트
-      this.peer.on("close", () => {
-        console.log("WebRTC 연결 종료");
+      peer.on("close", () => {
+        console.log(`[WebRTCService] ${socketId} WebRTC 연결 종료`);
         if (this.handlers.close) {
-          this.handlers.close();
+          this.handlers.close(socketId);
         }
       });
 
-      console.log(`WebRTC 초기화 완료 (initiator: ${initiator})`);
+      console.log(`[WebRTCService] Peer 초기화 완료 - ${socketId} (initiator: ${initiator})`);
+
+      // 대기 중인 시그널이 있으면 flush
+      this.flushPendingSignals(socketId);
     } catch (error) {
-      console.error("WebRTC 초기화 에러:", error);
+      console.error(`[WebRTCService] Peer 초기화 에러 - ${socketId}:`, error);
       throw error;
     }
   }
 
   /**
    * 상대방의 시그널 데이터 처리 (SDP offer/answer, ICE candidate)
+   * Early Candidates 문제 해결: peer 미존재 시 pendingSignals에 큐잉
+   *
+   * @param {string} socketId - 시그널을 보낸 상대방의 소켓 ID
    * @param {Object} signalData - SimplePeer 시그널 데이터
    */
-  signal(signalData) {
-    if (!this.peer) {
-      console.error("Peer가 초기화되지 않았습니다.");
+  signal(socketId, signalData) {
+    const peer = this.peers.get(socketId);
+
+    if (!peer) {
+      // Peer가 아직 생성되지 않았으면 pendingSignals에 큐잉 (Early Candidates 해결)
+      console.warn(
+        `[WebRTCService] Peer 미존재 (${socketId}), pendingSignals에 큐잉:`,
+        signalData.type || "candidate"
+      );
+
+      if (!this.pendingSignals.has(socketId)) {
+        this.pendingSignals.set(socketId, []);
+      }
+      this.pendingSignals.get(socketId).push(signalData);
       return;
     }
 
     try {
-      this.peer.signal(signalData);
-      console.log("시그널 처리 완료:", signalData.type || "candidate");
+      peer.signal(signalData);
+      console.log(
+        `[WebRTCService] 시그널 처리 완료 - ${socketId}:`,
+        signalData.type || "candidate"
+      );
     } catch (error) {
-      console.error("시그널 처리 에러:", error);
+      console.error(`[WebRTCService] 시그널 처리 에러 - ${socketId}:`, error);
       throw error;
     }
   }
 
   /**
-   * 미디어 트랙 교체 (화면 공유용)
-   * @param {MediaStreamTrack} oldTrack - 교체할 기존 트랙
-   * @param {MediaStreamTrack} newTrack - 새로운 트랙
+   * 대기 중인 시그널 flush (Peer 생성 후 호출)
+   * @param {string} socketId - flush할 socketId
    */
-  replaceTrack(oldTrack, newTrack) {
-    if (!this.peer) {
-      console.error("Peer가 초기화되지 않았습니다.");
+  flushPendingSignals(socketId) {
+    const pendingSignals = this.pendingSignals.get(socketId);
+
+    if (!pendingSignals || pendingSignals.length === 0) {
       return;
     }
 
-    try {
-      // SimplePeer의 내부 RTCPeerConnection에 접근하여 트랙 교체
-      const sender = this.peer._pc.getSenders().find((s) => s.track === oldTrack);
+    const peer = this.peers.get(socketId);
+    if (!peer) {
+      console.warn(`[WebRTCService] flushPendingSignals: Peer 미존재 (${socketId})`);
+      return;
+    }
 
-      if (sender) {
-        sender.replaceTrack(newTrack);
-        console.log("미디어 트랙 교체 완료");
-      } else {
-        console.log("교체할 트랙을 찾을 수 없습니다.");
+    console.log(
+      `[WebRTCService] Pending signals flush 시작 - ${socketId} (${pendingSignals.length}개)`
+    );
+
+    try {
+      // 큐에 쌓인 시그널 순차 처리
+      for (const signal of pendingSignals) {
+        peer.signal(signal);
+        console.log(`   - 처리: ${signal.type || "candidate"}`);
+      }
+
+      console.log(`[WebRTCService] Pending signals flush 완료 - ${socketId}`);
+    } catch (error) {
+      console.error(`[WebRTCService] Pending signals flush 에러 - ${socketId}:`, error);
+    } finally {
+      // 처리 후 큐 초기화
+      this.pendingSignals.delete(socketId);
+    }
+  }
+
+  /**
+   * 특정 Peer 제거 및 리소스 정리
+   * try-finally 패턴으로 리소스 정리 보장
+   *
+   * @param {string} socketId - 제거할 Peer의 소켓 ID
+   */
+  removePeer(socketId) {
+    try {
+      const peer = this.peers.get(socketId);
+      if (peer) {
+        console.log(`[WebRTCService] Peer 제거 시작 - ${socketId}`);
+        peer.destroy();
+        console.log(`[WebRTCService] Peer destroy 완료 - ${socketId}`);
       }
     } catch (error) {
-      console.error("트랙 교체 에러:", error);
-      throw error;
+      console.error(`[WebRTCService] Peer 제거 에러 - ${socketId}:`, error);
+    } finally {
+      // 에러 발생해도 Map에서 제거 보장
+      this.peers.delete(socketId);
+      this.pendingSignals.delete(socketId);
+      console.log(`[WebRTCService] Peer 리소스 정리 완료 - ${socketId}`);
     }
   }
 
   /**
-   * 현재 전송 중인 비디오 트랙 가져오기
+   * 모든 Peer 연결 종료 및 리소스 정리
+   */
+  destroyAll() {
+    console.log(`[WebRTCService] 모든 Peer 제거 시작 (${this.peers.size}개)`);
+
+    for (const socketId of this.peers.keys()) {
+      this.removePeer(socketId);
+    }
+
+    this.peers.clear();
+    this.pendingSignals.clear();
+    this.localStream = null;
+
+    console.log(`[WebRTCService] 모든 Peer 제거 완료`);
+  }
+
+  /**
+   * 모든 Peer에 새로운 미디어 트랙 전송 (화면 공유용)
+   * @param {MediaStreamTrack} newTrack - 새로운 트랙 (화면 공유 트랙)
+   */
+  replaceTrack(newTrack) {
+    console.log(`[WebRTCService] 모든 Peer에 트랙 교체 시작 (${this.peers.size}개)`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const [socketId, peer] of this.peers.entries()) {
+      try {
+        if (!peer._pc) {
+          console.warn(`[WebRTCService] ${socketId} - Peer._pc 미존재, 스킵`);
+          failCount++;
+          continue;
+        }
+
+        // 비디오 트랙을 전송하는 Sender 찾기
+        const sender = peer._pc.getSenders().find((s) => s.track && s.track.kind === newTrack.kind);
+
+        if (sender) {
+          sender.replaceTrack(newTrack);
+          console.log(`[WebRTCService] ${socketId} - 트랙 교체 완료`);
+          successCount++;
+        } else {
+          console.warn(`[WebRTCService] ${socketId} - 교체할 ${newTrack.kind} Sender 없음`);
+          failCount++;
+        }
+      } catch (error) {
+        console.error(`[WebRTCService] ${socketId} - 트랙 교체 에러:`, error);
+        failCount++;
+      }
+    }
+
+    console.log(`[WebRTCService] 트랙 교체 완료 - 성공: ${successCount}, 실패: ${failCount}`);
+  }
+
+  /**
+   * 현재 전송 중인 비디오 트랙 가져오기 (첫 번째 Peer 기준)
    * @returns {MediaStreamTrack|null}
    */
   getCurrentVideoTrack() {
-    if (!this.peer || !this.peer._pc) {
+    const firstPeer = this.peers.values().next().value;
+    if (!firstPeer || !firstPeer._pc) {
       return null;
     }
 
-    const sender = this.peer._pc.getSenders().find((s) => s.track && s.track.kind === "video");
-
+    const sender = firstPeer._pc.getSenders().find((s) => s.track && s.track.kind === "video");
     return sender ? sender.track : null;
   }
 
   /**
-   * 현재 전송 중인 오디오 트랙 가져오기
+   * 현재 전송 중인 오디오 트랙 가져오기 (첫 번째 Peer 기준)
    * @returns {MediaStreamTrack|null}
    */
   getCurrentAudioTrack() {
-    if (!this.peer || !this.peer._pc) {
+    const firstPeer = this.peers.values().next().value;
+    if (!firstPeer || !firstPeer._pc) {
       return null;
     }
 
-    const sender = this.peer._pc.getSenders().find((s) => s.track && s.track.kind === "audio");
-
+    const sender = firstPeer._pc.getSenders().find((s) => s.track && s.track.kind === "audio");
     return sender ? sender.track : null;
   }
 
   /**
-   * WebRTC 연결 종료 및 리소스 정리
+   * 특정 Peer의 연결 상태 확인
+   * @param {string} socketId - 확인할 Peer의 소켓 ID
+   * @returns {string|null} - 연결 상태 ('connected', 'connecting', 'disconnected' 등)
    */
-  destroy() {
-    try {
-      if (this.peer) {
-        this.peer.destroy();
-        this.peer = null;
-        console.log("WebRTC 연결 종료 및 리소스 정리 완료");
-      }
-
-      this.remoteStream = null;
-      this.localStream = null;
-      this.isInitiator = false;
-
-      // 핸들러 초기화
-      this.handlers = {
-        signal: null,
-        stream: null,
-        error: null,
-        close: null,
-        connect: null,
-      };
-
-      // 재연결 관련 속성 초기화
-      this.socketService = null;
-      this.targetSocketId = null;
-      this.isReconnecting = false;
-    } catch (error) {
-      console.error("WebRTC 종료 에러:", error);
+  getConnectionState(socketId) {
+    const peer = this.peers.get(socketId);
+    if (!peer || !peer._pc) {
+      return null;
     }
+
+    return peer._pc.connectionState;
+  }
+
+  /**
+   * 특정 Peer의 ICE 연결 상태 확인
+   * @param {string} socketId - 확인할 Peer의 소켓 ID
+   * @returns {string|null}
+   */
+  getIceConnectionState(socketId) {
+    const peer = this.peers.get(socketId);
+    if (!peer || !peer._pc) {
+      return null;
+    }
+
+    return peer._pc.iceConnectionState;
   }
 
   /**
    * 시그널 이벤트 핸들러 등록
-   * @param {Function} handler - 시그널 데이터를 받을 콜백 함수
+   * @param {Function} handler - (socketId, signal) => void
    */
   onSignal(handler) {
     this.handlers.signal = handler;
@@ -464,7 +517,7 @@ class WebRTCService {
 
   /**
    * 원격 스트림 수신 이벤트 핸들러 등록
-   * @param {Function} handler - 원격 스트림을 받을 콜백 함수
+   * @param {Function} handler - (socketId, stream) => void
    */
   onStream(handler) {
     this.handlers.stream = handler;
@@ -472,7 +525,7 @@ class WebRTCService {
 
   /**
    * 에러 이벤트 핸들러 등록
-   * @param {Function} handler - 에러를 받을 콜백 함수
+   * @param {Function} handler - (socketId, error) => void
    */
   onError(handler) {
     this.handlers.error = handler;
@@ -480,7 +533,7 @@ class WebRTCService {
 
   /**
    * 연결 종료 이벤트 핸들러 등록
-   * @param {Function} handler - 연결 종료 시 호출될 콜백 함수
+   * @param {Function} handler - (socketId) => void
    */
   onClose(handler) {
     this.handlers.close = handler;
@@ -488,34 +541,43 @@ class WebRTCService {
 
   /**
    * 연결 성공 이벤트 핸들러 등록
-   * @param {Function} handler - 연결 성공 시 호출될 콜백 함수
+   * @param {Function} handler - (socketId) => void
    */
   onConnect(handler) {
     this.handlers.connect = handler;
   }
 
   /**
-   * 연결 상태 확인
-   * @returns {string|null} - 연결 상태 ('connected', 'connecting', 'disconnected' 등)
+   * ICE 상태 변화 이벤트 핸들러 등록 (High priority)
+   * @param {Function} handler - (socketId, state) => void
    */
-  getConnectionState() {
-    if (!this.peer || !this.peer._pc) {
-      return null;
-    }
-
-    return this.peer._pc.connectionState;
+  onIceStateChange(handler) {
+    this.handlers.iceStateChange = handler;
   }
 
   /**
-   * ICE 연결 상태 확인
-   * @returns {string|null}
+   * 현재 연결된 Peer 수 확인
+   * @returns {number}
    */
-  getIceConnectionState() {
-    if (!this.peer || !this.peer._pc) {
-      return null;
-    }
+  getPeerCount() {
+    return this.peers.size;
+  }
 
-    return this.peer._pc.iceConnectionState;
+  /**
+   * 모든 Peer의 소켓 ID 목록 반환
+   * @returns {string[]}
+   */
+  getPeerIds() {
+    return Array.from(this.peers.keys());
+  }
+
+  /**
+   * 특정 Peer 존재 여부 확인
+   * @param {string} socketId
+   * @returns {boolean}
+   */
+  hasPeer(socketId) {
+    return this.peers.has(socketId);
   }
 }
 

@@ -47,6 +47,7 @@ export const setNicknameSchema = z.object({
 export const roomJoinSchema = z.object({
   roomId: roomIdSchema,
   nickname: nicknameSchema.optional(), // 닉네임은 선택적 (나중에 설정 가능)
+  maxParticipants: z.number().int().min(2).max(10).optional(), // 최대 참가자 수 (선택적)
 });
 
 /**
@@ -138,4 +139,11 @@ export const mediaReconnectingSchema = z.object({
  */
 export const mediaReconnectedSchema = z.object({
   to: socketIdSchema,
+});
+
+/**
+ * 화면 공유 권한 부여/회수 스키마
+ */
+export const screenSharePermissionSchema = z.object({
+  targetSocketId: socketIdSchema,
 });

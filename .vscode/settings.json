@@ -53,6 +53,7 @@
     "canplay",
     "canplaythrough",
     "loadedmetadata",
+    "mediasoup",
     "unmuted",
     "webrtc"
   ]
