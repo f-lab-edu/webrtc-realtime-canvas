@@ -2,8 +2,9 @@
  * ChatService 테스트
  * 채팅 메시지 닉네임 표시 테스트
  */
-import { beforeEach, describe, expect, it } from "@jest/globals";
 import ChatService from "./ChatService.js";
+
+// Jest globals는 injectGlobals: true로 자동 주입됨
 
 describe("ChatService", () => {
   let chatService;

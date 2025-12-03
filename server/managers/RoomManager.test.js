@@ -2,8 +2,10 @@
  * RoomManager 테스트
  * P2P Mesh 다중 참가자 지원 기능 테스트
  */
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import RoomManager from "./RoomManager.js";
+
+// Jest globals는 injectGlobals: true로 자동 주입됨
+// describe, it, expect, beforeEach, afterEach는 전역으로 사용 가능
 
 describe("RoomManager - P2P Mesh 지원", () => {
   let roomManager;

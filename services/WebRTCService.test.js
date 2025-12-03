@@ -2,31 +2,33 @@
  * WebRTCService 테스트
  * P2P Mesh 다중 Peer 지원 기능 테스트
  */
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
+
+// ESM 환경에서 jest 객체 접근
+const jestObj = import.meta.jest;
 
 // SimplePeer 모킹 - 모듈 레벨에서 완전히 교체
-const mockSimplePeer = jest.fn();
-jest.unstable_mockModule("simple-peer", () => ({
+const mockSimplePeer = jestObj.fn();
+jestObj.unstable_mockModule("simple-peer", () => ({
   default: mockSimplePeer,
 }));
 
 // 모킹 후 WebRTCService import
 const { default: WebRTCService } = await import("./WebRTCService.js");
 
-// SimplePeer 모킹 팩토리
+// SimplePeer 모킹 팩토리 - import.meta.jest 사용
 function createMockPeer(config) {
   const eventHandlers = {};
   const mockPeer = {
     _pc: {
       connectionState: "new",
       iceConnectionState: "new",
-      getSenders: jest.fn(() => []),
+      getSenders: jestObj.fn(() => []),
       oniceconnectionstatechange: null,
       onconnectionstatechange: null,
     },
-    signal: jest.fn(),
-    destroy: jest.fn(),
-    on: jest.fn((event, handler) => {
+    signal: jestObj.fn(),
+    destroy: jestObj.fn(),
+    on: jestObj.fn((event, handler) => {
       eventHandlers[event] = handler;
     }),
     // 테스트용 헬퍼: 이벤트 수동 트리거
@@ -45,7 +47,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
 
   beforeEach(() => {
     service = new WebRTCService();
-    jest.clearAllMocks();
+    jestObj.clearAllMocks();
     // SimplePeer 모킹 구현 설정
     mockSimplePeer.mockImplementation(createMockPeer);
   });
@@ -194,7 +196,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("ICE 상태 변화 시 콜백이 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const iceStateChangeHandler = jest.fn();
+      const iceStateChangeHandler = jestObj.fn();
       service.onIceStateChange(iceStateChangeHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -214,7 +216,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("여러 Peer의 ICE 상태를 독립적으로 모니터링한다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const iceStateChangeHandler = jest.fn();
+      const iceStateChangeHandler = jestObj.fn();
       service.onIceStateChange(iceStateChangeHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -324,7 +326,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("시그널 핸들러가 socketId와 함께 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const signalHandler = jest.fn();
+      const signalHandler = jestObj.fn();
       service.onSignal(signalHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -341,7 +343,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("스트림 핸들러가 socketId와 함께 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const streamHandler = jest.fn();
+      const streamHandler = jestObj.fn();
       service.onStream(streamHandler);
 
       service.initializePeer("peer-1", false, mockStream);
@@ -363,7 +365,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("에러 핸들러가 socketId와 함께 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const errorHandler = jest.fn();
+      const errorHandler = jestObj.fn();
       service.onError(errorHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -373,14 +375,14 @@ describe("WebRTCService - P2P Mesh 지원", () => {
       const mockError = new Error("WebRTC error");
       peer._emit("error", mockError);
 
-      // Then
-      expect(errorHandler).toHaveBeenCalledWith("peer-1", mockError);
+      // Then: socketId, error, isUserInitiated 인자로 호출됨
+      expect(errorHandler).toHaveBeenCalledWith("peer-1", mockError, false);
     });
 
     it("연결 종료 핸들러가 socketId와 함께 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const closeHandler = jest.fn();
+      const closeHandler = jestObj.fn();
       service.onClose(closeHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -396,7 +398,7 @@ describe("WebRTCService - P2P Mesh 지원", () => {
     it("연결 성공 핸들러가 socketId와 함께 호출된다", () => {
       // Given
       const mockStream = { getAudioTracks: () => [], getVideoTracks: () => [] };
-      const connectHandler = jest.fn();
+      const connectHandler = jestObj.fn();
       service.onConnect(connectHandler);
 
       service.initializePeer("peer-1", true, mockStream);
@@ -420,8 +422,8 @@ describe("WebRTCService - P2P Mesh 지원", () => {
       const peer1 = service.peers.get("peer-1");
       const peer2 = service.peers.get("peer-2");
 
-      const mockSender1 = { track: { kind: "video" }, replaceTrack: jest.fn() };
-      const mockSender2 = { track: { kind: "video" }, replaceTrack: jest.fn() };
+      const mockSender1 = { track: { kind: "video" }, replaceTrack: jestObj.fn() };
+      const mockSender2 = { track: { kind: "video" }, replaceTrack: jestObj.fn() };
 
       peer1._pc.getSenders.mockReturnValue([mockSender1]);
       peer2._pc.getSenders.mockReturnValue([mockSender2]);

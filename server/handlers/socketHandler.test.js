@@ -1,7 +1,10 @@
 /**
  * Socket 이벤트 핸들러 테스트
  */
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+
+// ESM 환경에서 jest 객체 접근
+const jestObj = import.meta.jest;
+
 import RoomManager from "../managers/RoomManager.js";
 import registerSocketHandlers from "./socketHandler.js";
 
@@ -16,18 +19,18 @@ describe("Socket 이벤트 핸들러", () => {
 
     // Mock Socket.io 서버
     mockIo = {
-      to: jest.fn().mockReturnThis(),
-      emit: jest.fn(),
+      to: jestObj.fn().mockReturnThis(),
+      emit: jestObj.fn(),
     };
 
     // Mock Socket
     mockSocket = {
       id: "socket-123",
-      on: jest.fn(),
-      emit: jest.fn(),
-      join: jest.fn(),
-      leave: jest.fn(),
-      to: jest.fn().mockReturnThis(),
+      on: jestObj.fn(),
+      emit: jestObj.fn(),
+      join: jestObj.fn(),
+      leave: jestObj.fn(),
+      to: jestObj.fn().mockReturnThis(),
     };
   });
 
