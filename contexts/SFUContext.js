@@ -477,11 +477,46 @@ export function SFUProvider({ children }) {
       });
     };
 
+    // room:participant-left - 참가자 퇴장 시 완전 정리
+    const handleParticipantLeft = (data) => {
+      const socketId = data.socketId || data;
+      console.log("[SFUContext] 참가자 퇴장:", socketId);
+
+      // 1. 해당 socketId의 모든 remoteProducers 정리
+      setRemoteProducers((prev) => {
+        const next = new Map(prev);
+        for (const [producerId, info] of next.entries()) {
+          if (info.socketId === socketId) {
+            next.delete(producerId);
+          }
+        }
+        return next;
+      });
+
+      // 2. 해당 socketId의 모든 Consumers 정리
+      const sfuService = sfuServiceRef.current;
+      if (sfuService) {
+        sfuService.closeConsumersBySocketId(socketId);
+      }
+
+      // 3. remoteStreams에서 완전 삭제
+      setRemoteStreams((prev) => {
+        const next = new Map(prev);
+        const stream = next.get(socketId);
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          next.delete(socketId);
+        }
+        return next;
+      });
+    };
+
     // 이벤트 리스너 등록
     socketService.on("sfu:new-producer", handleNewProducer);
     socketService.on("sfu:producer-closed", handleProducerClosed);
     socketService.on("sfu:producer-paused", handleProducerPaused);
     socketService.on("sfu:producer-resumed", handleProducerResumed);
+    socketService.on("room:participant-left", handleParticipantLeft);
 
     // 정리
     return () => {
@@ -489,6 +524,7 @@ export function SFUProvider({ children }) {
       socketService.off("sfu:producer-closed", handleProducerClosed);
       socketService.off("sfu:producer-paused", handleProducerPaused);
       socketService.off("sfu:producer-resumed", handleProducerResumed);
+      socketService.off("room:participant-left", handleParticipantLeft);
     };
   }, [socketService, isConnected, sfuState]);
 

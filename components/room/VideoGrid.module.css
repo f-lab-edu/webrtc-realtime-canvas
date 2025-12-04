@@ -54,6 +54,17 @@
   height: 100%;
 }
 
+/* 7~9명: 3x3 레이아웃 */
+.grid-9 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  padding: 8px;
+  width: 100%;
+  height: 100%;
+}
+
 /* 반응형: 모바일 세로 모드 */
 @media (max-width: 768px) and (orientation: portrait) {
   .grid-2 {
@@ -69,6 +80,11 @@
   .grid-6 {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(6, 1fr);
+  }
+
+  .grid-9 {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(9, 1fr);
   }
 }
 
@@ -88,6 +104,11 @@
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(2, 1fr);
   }
+
+  .grid-9 {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
 }
 
 /* 반응형: 태블릿 */
@@ -95,5 +116,10 @@
   .grid-6 {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(2, 1fr);
+  }
+
+  .grid-9 {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
   }
 }

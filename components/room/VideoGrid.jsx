@@ -38,7 +38,8 @@ export default function VideoGrid({
     if (count <= 1) return styles["grid-1"];
     if (count <= 2) return styles["grid-2"];
     if (count <= 4) return styles["grid-4"];
-    return styles["grid-6"];
+    if (count <= 6) return styles["grid-6"];
+    return styles["grid-9"];
   };
 
   // 전체 참가자 수 (로컬 + 원격)
