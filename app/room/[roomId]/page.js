@@ -8,6 +8,7 @@ import ControlBar from "@/components/room/ControlBar";
 import NicknameInput from "@/components/room/NicknameInput";
 import SettingsPanel from "@/components/room/SettingsPanel";
 import VideoGrid from "@/components/room/VideoGrid";
+import VideoPlayer from "@/components/room/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
 import WhiteboardToolbar from "@/components/whiteboard/WhiteboardToolbar";
@@ -40,12 +41,14 @@ export default function RoomPage() {
     participantNicknames,
     hostSocketId,
     socketService,
+    screenShareInfo, // 원격 화면 공유 상태
   } = useRoomContext();
   const {
     localStream,
     remoteStream,
     isVideoEnabled,
     isScreenSharing,
+    screenStream, // 화면 공유 스트림
     setParticipationMode,
     initializeMedia,
     cleanupMedia,
@@ -71,14 +74,23 @@ export default function RoomPage() {
     });
   }, [remoteStream]);
 
-  // 디버그 패널 표시 상태
-  const [showDebug, setShowDebug] = useState(true);
+  // 디버그 패널 표시 상태 (기본값: 숨김)
+  const [showDebug, setShowDebug] = useState(false);
 
   // URL 복사 성공 상태
   const [copySuccess, setCopySuccess] = useState(false);
 
   // 설정 패널 표시 상태
   const [showSettings, setShowSettings] = useState(false);
+
+  // 화면 공유 모드 판단:
+  // 1. 내가 화면 공유 중 (isScreenSharing && screenStream)
+  // 2. 다른 사람이 화면 공유 중 (screenShareInfo가 있고, 내가 아닌 경우)
+  // 주의: 내가 화면 공유 중지 시 screenShareInfo가 아직 남아있을 수 있으므로 socketId로 구분
+  const mySocketId = socketService?.socket?.id;
+  const isRemoteScreenSharing =
+    screenShareInfo?.isSharing && screenShareInfo?.socketId !== mySocketId;
+  const isScreenShareMode = (isScreenSharing && screenStream) || isRemoteScreenSharing;
 
   /**
    * 닉네임 설정 완료 핸들러
@@ -234,41 +246,109 @@ export default function RoomPage() {
         </div>
       </header>
 
-      {/* 메인 컨텐츠: 3컬럼 레이아웃 (3:5:2 비율) */}
+      {/* 메인 컨텐츠: 화면 공유 모드에 따라 레이아웃 변경 */}
       <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
-        {/* 왼쪽: 비디오 그리드 (30%) */}
-        <aside className="flex-[3] flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
-          <VideoGrid
-            localStream={localStream}
-            remoteStreams={remoteStreams}
-            isVideoEnabled={isVideoEnabled}
-            isScreenSharing={isScreenSharing}
-            participantNicknames={participantNicknames}
-            hostSocketId={hostSocketId}
-            mySocketId={socketService?.socket?.id}
-          />
-        </aside>
+        {isScreenShareMode ? (
+          // 화면 공유 모드: 3:5:2 비율 (일반 모드와 동일, 중앙에만 화면 공유 오버레이)
+          <>
+            {/* 왼쪽: 비디오 그리드 (30%) - 일반 모드와 동일 */}
+            <aside className="flex-3 flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
+              <VideoGrid
+                localStream={localStream}
+                remoteStreams={remoteStreams}
+                isVideoEnabled={isVideoEnabled}
+                isScreenSharing={isScreenSharing}
+                participantNicknames={participantNicknames}
+                hostSocketId={hostSocketId}
+                mySocketId={mySocketId}
+              />
+            </aside>
 
-        {/* 중앙: 화이트보드 (50%) */}
-        <main className="flex-[5] flex flex-col min-h-0 overflow-hidden">
-          <WhiteboardProvider>
-            <WhiteboardToolbar />
-            <div className="flex-1 min-h-0">
-              <WhiteboardCanvas />
-            </div>
-          </WhiteboardProvider>
-        </main>
+            {/* 중앙: 화면 공유 + 화이트보드 오버레이 (50%) */}
+            <main className="flex-5 flex flex-col min-h-0 overflow-hidden relative">
+              {/* 화면 공유 스트림 (배경) */}
+              <div className="absolute inset-0 z-10 bg-gray-950">
+                {/* 내 화면 공유 스트림 또는 원격 화면 공유 스트림 */}
+                {screenStream ? (
+                  <VideoPlayer
+                    stream={screenStream}
+                    isLocal={true}
+                    isVideoEnabled={true}
+                    nickname="화면 공유"
+                    isScreenShare={true}
+                  />
+                ) : screenShareInfo?.isSharing ? (
+                  // 원격 화면 공유: remoteStreams에서 화면 공유자의 스트림 찾기
+                  <VideoPlayer
+                    stream={remoteStreams.get(screenShareInfo.socketId)}
+                    isLocal={false}
+                    isVideoEnabled={true}
+                    nickname={`${screenShareInfo.nickname}의 화면 공유`}
+                    isScreenShare={true}
+                  />
+                ) : null}
+              </div>
+              {/* 화이트보드 오버레이 (투명 배경) */}
+              <div className="absolute inset-0 z-20 flex flex-col">
+                <WhiteboardProvider>
+                  <WhiteboardToolbar />
+                  <div className="flex-1 min-h-0">
+                    <WhiteboardCanvas isOverlay={true} />
+                  </div>
+                </WhiteboardProvider>
+              </div>
+            </main>
 
-        {/* 오른쪽: 채팅 영역 (20%) */}
-        {showChat && (
-          <aside className="flex-[2] flex flex-col bg-gray-900 border-l border-gray-800 transition-all duration-300 overflow-hidden">
-            <ChatPanel
-              messages={messages}
-              unreadCount={unreadCount}
-              onSendMessage={sendMessage}
-              onClearUnread={clearUnreadCount}
-            />
-          </aside>
+            {/* 오른쪽: 채팅 영역 (20%) */}
+            {showChat && (
+              <aside className="flex-2 flex flex-col bg-gray-900 border-l border-gray-800 transition-all duration-300 overflow-hidden">
+                <ChatPanel
+                  messages={messages}
+                  unreadCount={unreadCount}
+                  onSendMessage={sendMessage}
+                  onClearUnread={clearUnreadCount}
+                />
+              </aside>
+            )}
+          </>
+        ) : (
+          // 일반 모드: 3컬럼 레이아웃 (3:5:2 비율)
+          <>
+            {/* 왼쪽: 비디오 그리드 (30%) */}
+            <aside className="flex-3 flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
+              <VideoGrid
+                localStream={localStream}
+                remoteStreams={remoteStreams}
+                isVideoEnabled={isVideoEnabled}
+                isScreenSharing={isScreenSharing}
+                participantNicknames={participantNicknames}
+                hostSocketId={hostSocketId}
+                mySocketId={socketService?.socket?.id}
+              />
+            </aside>
+
+            {/* 중앙: 화이트보드 (50%) */}
+            <main className="flex-5 flex flex-col min-h-0 overflow-hidden">
+              <WhiteboardProvider>
+                <WhiteboardToolbar />
+                <div className="flex-1 min-h-0">
+                  <WhiteboardCanvas />
+                </div>
+              </WhiteboardProvider>
+            </main>
+
+            {/* 오른쪽: 채팅 영역 (20%) */}
+            {showChat && (
+              <aside className="flex-2 flex flex-col bg-gray-900 border-l border-gray-800 transition-all duration-300 overflow-hidden">
+                <ChatPanel
+                  messages={messages}
+                  unreadCount={unreadCount}
+                  onSendMessage={sendMessage}
+                  onClearUnread={clearUnreadCount}
+                />
+              </aside>
+            )}
+          </>
         )}
       </div>
 
@@ -278,8 +358,14 @@ export default function RoomPage() {
       {/* 설정 패널 */}
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
-      {/* 오디오 디버그 패널 (개발 중에만 표시) */}
-      {showDebug && <AudioDebugPanel localStream={localStream} remoteStream={remoteStream} />}
+      {/* 오디오 디버그 패널 (모달 형태) */}
+      {showDebug && (
+        <AudioDebugPanel
+          localStream={localStream}
+          remoteStream={remoteStream}
+          onClose={() => setShowDebug(false)}
+        />
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ function useSFU() {
     remoteStreams,
     pauseProducer,
     resumeProducer,
+    closeProducer,
     localProducers,
     getProducerIdByKind,
   } = useSFUContext();
@@ -37,6 +38,9 @@ function useSFU() {
 
   /** Producer 생성 완료 플래그 */
   const hasProducedRef = useRef(false);
+
+  /** 화면 공유 Producer ID */
+  const screenShareProducerIdRef = useRef(null);
 
   /** 최신 값 참조용 refs */
   const localStreamRef = useRef(localStream);
@@ -187,6 +191,56 @@ function useSFU() {
           console.error("[useSFU] 오디오 토글 실패:", err);
         }
       },
+
+      /**
+       * 화면 공유 시작 콜백
+       * @param {MediaStream} screenStream - 화면 공유 스트림
+       */
+      onScreenShareStart: async (screenStream) => {
+        try {
+          const videoTrack = screenStream.getVideoTracks()[0];
+          if (!videoTrack) {
+            console.warn("[useSFU] 화면 공유 비디오 트랙 없음");
+            return;
+          }
+
+          console.log("[useSFU] 화면 공유 Producer 생성");
+          const producerId = await produce(videoTrack, { kind: "video", screenShare: true });
+          screenShareProducerIdRef.current = producerId;
+
+          // Socket 이벤트로 화면 공유 상태 브로드캐스트 (socketId 명시적 포함)
+          if (socketService) {
+            const mySocketId = socketService.socket?.id;
+            socketService.emit("screen-share:started", { roomId, socketId: mySocketId });
+            console.log("[useSFU] 화면 공유 시작 이벤트 전송, socketId:", mySocketId);
+          }
+        } catch (err) {
+          console.error("[useSFU] 화면 공유 Producer 생성 실패:", err);
+        }
+      },
+
+      /**
+       * 화면 공유 중지 콜백
+       */
+      onScreenShareStop: async () => {
+        try {
+          const producerId = screenShareProducerIdRef.current;
+          if (producerId) {
+            console.log("[useSFU] 화면 공유 Producer 종료");
+            await closeProducer(producerId);
+            screenShareProducerIdRef.current = null;
+          }
+
+          // Socket 이벤트로 화면 공유 중지 브로드캐스트 (socketId 명시적 포함)
+          if (socketService) {
+            const mySocketId = socketService.socket?.id;
+            socketService.emit("screen-share:stopped", { roomId, socketId: mySocketId });
+            console.log("[useSFU] 화면 공유 중지 이벤트 전송, socketId:", mySocketId);
+          }
+        } catch (err) {
+          console.error("[useSFU] 화면 공유 Producer 종료 실패:", err);
+        }
+      },
     };
 
     // 콜백 등록
@@ -205,6 +259,10 @@ function useSFU() {
     getProducerIdByKind,
     pauseProducer,
     resumeProducer,
+    closeProducer,
+    produce,
+    socketService,
+    roomId,
   ]);
 
   // ============ 정리 ============
