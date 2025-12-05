@@ -8,8 +8,10 @@ import { useRoomContext, useWhiteboard } from "@/contexts";
  * Fabric.js 기반 화이트보드 캔버스를 렌더링
  * 호스트: cursor: crosshair (그리기 가능)
  * 비호스트: cursor: default + pointer-events: none (읽기 전용)
+ *
+ * @param {boolean} isOverlay - 오버레이 모드 (투명 배경)
  */
-export default function WhiteboardCanvas() {
+export default function WhiteboardCanvas({ isOverlay = false }) {
   const canvasElementRef = useRef(null);
   const { initializeWhiteboard, setCanvasSize, isInitialized } = useWhiteboard();
   const { isHost } = useRoomContext();
@@ -35,9 +37,11 @@ export default function WhiteboardCanvas() {
     canvasElement.height = height;
 
     // Fabric.js 캔버스 초기화 (1회만 - initializeWhiteboard 내부에서 중복 체크)
+    // isOverlay 모드일 때 투명 배경 적용
     initializeWhiteboard(canvasElement, {
       width,
       height,
+      backgroundColor: isOverlay ? "transparent" : "#ffffff",
     });
 
     // ResizeObserver로 container 크기 변화 감지
@@ -61,7 +65,7 @@ export default function WhiteboardCanvas() {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [initializeWhiteboard, setCanvasSize]);
+  }, [initializeWhiteboard, setCanvasSize, isOverlay]);
 
   /**
    * isHost 변경 시 Fabric.js canvas-container에 스타일 적용
@@ -91,7 +95,10 @@ export default function WhiteboardCanvas() {
   }, [isHost, isInitialized]);
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-white">
+    <div
+      ref={containerRef}
+      className={`w-full h-full ${isOverlay ? "bg-transparent" : "bg-white"}`}
+    >
       {/* Fabric.js 캔버스 */}
       <canvas ref={canvasElementRef} />
     </div>

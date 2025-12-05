@@ -14,6 +14,95 @@ class WhiteboardService {
   }
 
   /**
+   * 좌표 정규화 (0~1 범위)
+   * 송신 시 사용: 로컬 캔버스 좌표 → 정규화된 좌표
+   * @param {Object} obj - Fabric.js 객체 데이터
+   * @param {number} canvasWidth - 현재 캔버스 너비
+   * @param {number} canvasHeight - 현재 캔버스 높이
+   * @returns {Object} - 정규화된 객체 데이터
+   */
+  normalizeCoordinates(obj, canvasWidth, canvasHeight) {
+    if (!obj || !canvasWidth || !canvasHeight) return obj;
+
+    const normalized = { ...obj };
+
+    // 기본 위치 정규화
+    if (typeof normalized.left === "number") {
+      normalized.left = normalized.left / canvasWidth;
+    }
+    if (typeof normalized.top === "number") {
+      normalized.top = normalized.top / canvasHeight;
+    }
+
+    // 스케일 정규화 (scaleX, scaleY는 1 기준이므로 정규화 불필요)
+    // width, height 정규화 (있는 경우)
+    if (typeof normalized.width === "number") {
+      normalized.width = normalized.width / canvasWidth;
+    }
+    if (typeof normalized.height === "number") {
+      normalized.height = normalized.height / canvasHeight;
+    }
+
+    // Path 데이터 정규화 (자유 그리기 경로)
+    if (normalized.path && Array.isArray(normalized.path)) {
+      normalized.path = normalized.path.map((cmd) => {
+        if (!Array.isArray(cmd)) return cmd;
+        return cmd.map((val, idx) => {
+          if (idx === 0) return val; // 명령어 (M, L, Q, C 등)
+          // 홀수 인덱스는 X좌표, 짝수 인덱스는 Y좌표
+          return idx % 2 === 1 ? val / canvasWidth : val / canvasHeight;
+        });
+      });
+    }
+
+    return normalized;
+  }
+
+  /**
+   * 좌표 역정규화 (로컬 캔버스 크기에 맞춤)
+   * 수신 시 사용: 정규화된 좌표 → 로컬 캔버스 좌표
+   * @param {Object} obj - 정규화된 객체 데이터
+   * @param {number} canvasWidth - 현재 캔버스 너비
+   * @param {number} canvasHeight - 현재 캔버스 높이
+   * @returns {Object} - 역정규화된 객체 데이터
+   */
+  denormalizeCoordinates(obj, canvasWidth, canvasHeight) {
+    if (!obj || !canvasWidth || !canvasHeight) return obj;
+
+    const denormalized = { ...obj };
+
+    // 기본 위치 역정규화
+    if (typeof denormalized.left === "number") {
+      denormalized.left = denormalized.left * canvasWidth;
+    }
+    if (typeof denormalized.top === "number") {
+      denormalized.top = denormalized.top * canvasHeight;
+    }
+
+    // width, height 역정규화 (있는 경우)
+    if (typeof denormalized.width === "number") {
+      denormalized.width = denormalized.width * canvasWidth;
+    }
+    if (typeof denormalized.height === "number") {
+      denormalized.height = denormalized.height * canvasHeight;
+    }
+
+    // Path 데이터 역정규화 (자유 그리기 경로)
+    if (denormalized.path && Array.isArray(denormalized.path)) {
+      denormalized.path = denormalized.path.map((cmd) => {
+        if (!Array.isArray(cmd)) return cmd;
+        return cmd.map((val, idx) => {
+          if (idx === 0) return val; // 명령어 (M, L, Q, C 등)
+          // 홀수 인덱스는 X좌표, 짝수 인덱스는 Y좌표
+          return idx % 2 === 1 ? val * canvasWidth : val * canvasHeight;
+        });
+      });
+    }
+
+    return denormalized;
+  }
+
+  /**
    * Fabric.js 캔버스 초기화
    * @param {HTMLCanvasElement} canvasElement - HTML canvas 엘리먼트
    * @param {Object} options - 캔버스 옵션
@@ -221,20 +310,25 @@ class WhiteboardService {
 
       const { type, data } = event;
 
+      // 좌표 역정규화 (정규화된 좌표 → 로컬 캔버스 좌표)
+      const canvasWidth = this.canvas?.width || 1;
+      const canvasHeight = this.canvas?.height || 1;
+      const denormalizedData = this.denormalizeCoordinates(data, canvasWidth, canvasHeight);
+
       switch (type) {
         case "path:created":
         case "object:added": {
           // JSON 데이터로부터 Fabric 객체 생성
           console.log(
-            "원격 객체 생성 중:",
+            "원격 객체 생성 중 (역정규화):",
             type,
             "데이터:",
-            JSON.stringify(data).substring(0, 200)
+            JSON.stringify(denormalizedData).substring(0, 200)
           );
 
           // Fabric.js v6: enlivenObjects는 Promise를 반환할 수 있음
           const enlivenResult = fabric.util.enlivenObjects(
-            [data],
+            [denormalizedData],
             (objects) => {
               console.log("enlivenObjects 콜백 실행, 객체 수:", objects.length);
               objects.forEach((obj) => {
@@ -284,10 +378,12 @@ class WhiteboardService {
         }
 
         case "object:modified": {
-          // 기존 객체 찾아서 수정
-          const objToModify = this.canvas.getObjects().find((o) => o.id === data.id);
+          // 기존 객체 찾아서 수정 (역정규화된 데이터 사용)
+          const objToModify = this.canvas
+            .getObjects()
+            .find((o) => o.id === denormalizedData.id);
           if (objToModify) {
-            objToModify.set(data);
+            objToModify.set(denormalizedData);
             this.canvas.renderAll();
           }
           this.isApplyingRemoteEvent = false;
@@ -295,7 +391,7 @@ class WhiteboardService {
         }
 
         case "object:removed": {
-          // 객체 삭제
+          // 객체 삭제 (id는 정규화 대상 아님, data.id 사용)
           const objToRemove = this.canvas.getObjects().find((o) => o.id === data.id);
           if (objToRemove) {
             this.canvas.remove(objToRemove);
@@ -327,6 +423,7 @@ class WhiteboardService {
 
   /**
    * 캔버스 초기화 (모든 객체 삭제)
+   * canvas.clear() 대신 개별 객체 삭제로 DOM 영향 최소화
    */
   clear() {
     if (!this.canvas) {
@@ -335,7 +432,16 @@ class WhiteboardService {
     }
 
     try {
-      this.canvas.clear();
+      // canvas.clear() 대신 객체만 개별 삭제 (화면 공유 등 다른 DOM 요소에 영향 방지)
+      const objects = this.canvas.getObjects();
+      console.log(`캔버스 초기화: ${objects.length}개 객체 삭제`);
+
+      // 객체를 하나씩 제거
+      for (const obj of objects) {
+        this.canvas.remove(obj);
+      }
+
+      // 배경색 재설정
       this.canvas.backgroundColor = "#ffffff";
       this.canvas.renderAll();
 

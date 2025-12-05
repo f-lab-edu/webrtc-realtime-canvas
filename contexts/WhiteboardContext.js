@@ -119,10 +119,22 @@ export function WhiteboardProvider({ children }) {
 
         // Socket이 연결되어 있고 roomId가 있을 때만 전송
         if (currentSocketService && currentRoomId && currentIsConnected) {
-          console.log("로컬 그리기 이벤트 전송:", eventData.type);
+          // 좌표 정규화 적용 (0~1 범위)
+          const canvasWidth = whiteboardService.canvas?.width || 1;
+          const canvasHeight = whiteboardService.canvas?.height || 1;
+          const normalizedData = whiteboardService.normalizeCoordinates(
+            eventData.data,
+            canvasWidth,
+            canvasHeight
+          );
+
+          console.log("로컬 그리기 이벤트 전송 (정규화):", eventData.type);
           currentSocketService.emit("whiteboard:event", {
             roomId: currentRoomId,
-            event: eventData,
+            event: {
+              type: eventData.type,
+              data: normalizedData,
+            },
           });
         } else {
           console.warn("그리기 이벤트 전송 실패 - Socket 또는 방 정보 없음:", {
