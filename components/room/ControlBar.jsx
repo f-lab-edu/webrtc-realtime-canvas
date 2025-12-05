@@ -69,7 +69,7 @@ export default function ControlBar({ onSettingsClick }) {
         }
 
         // 권한 있음: 화면 공유 시작
-        await startScreenShare();
+        await startScreenShare(hasScreenSharePermission, isHost);
       }
     } catch (error) {
       console.error("[ControlBar] 화면 공유 토글 에러:", error);

@@ -303,7 +303,7 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
         {/* 버튼 그룹 */}
         <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
-          <Button onClick={onClose} variant="secondary" disabled={isReconnecting}>
+          <Button onClick={onClose} variant="outline" disabled={isReconnecting}>
             취소
           </Button>
           <Button onClick={handleSave} disabled={isReconnecting}>
