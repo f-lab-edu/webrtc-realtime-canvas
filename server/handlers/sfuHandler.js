@@ -270,21 +270,28 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         return callback({ error: "producerId는 필수입니다" });
       }
 
+      // Producer 정보를 종료 전에 조회 (appData 포함)
+      const producer = mediasoupManager.getProducer(producerId);
+      const producerKind = producer?.kind;
+      const producerAppData = producer?.appData || {};
+
       mediasoupManager.closeProducer(producerId);
 
       // RoomManager에서 producer 정보 제거
       roomManager.removeProducerId(socket.id, producerId);
 
-      // 방의 다른 참가자들에게 알림
+      // 방의 다른 참가자들에게 알림 (appData 포함)
       const roomId = roomManager.getRoomIdBySocketId(socket.id);
       if (roomId) {
         socket.to(roomId).emit("sfu:producer-closed", {
           producerId,
           producerSocketId: socket.id,
+          kind: producerKind,
+          appData: producerAppData, // 화면 공유 여부 등 메타데이터 전달
         });
       }
 
-      console.log(`[sfu:close-producer] producerId=${producerId}`);
+      console.log(`[sfu:close-producer] producerId=${producerId}, appData=${JSON.stringify(producerAppData)}`);
 
       callback({ success: true });
     } catch (error) {
@@ -389,8 +396,12 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         rtpCapabilities
       );
 
+      // Producer의 appData 조회 (화면 공유 여부 등)
+      const producer = mediasoupManager.getProducer(producerId);
+      const producerAppData = producer?.appData || {};
+
       console.log(
-        `[sfu:consume-with-transport] roomId=${roomId}, consumerId=${consumer.id}, producerId=${producerId}`
+        `[sfu:consume-with-transport] roomId=${roomId}, consumerId=${consumer.id}, producerId=${producerId}, appData=${JSON.stringify(producerAppData)}`
       );
 
       callback({
@@ -398,6 +409,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         producerId: consumer.producerId,
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
+        appData: producerAppData, // 화면 공유 여부 등 Producer 메타데이터 전달
       });
     } catch (error) {
       console.error("[sfu:consume-with-transport] 에러:", error);

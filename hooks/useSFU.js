@@ -25,6 +25,7 @@ function useSFU() {
     cleanup,
     sfuState,
     remoteStreams,
+    screenShareStreams, // 원격 화면 공유 스트림
     pauseProducer,
     resumeProducer,
     closeProducer,
@@ -284,6 +285,8 @@ function useSFU() {
   return {
     /** 원격 스트림 (VideoGrid 호환) */
     remoteStreams,
+    /** 원격 화면 공유 스트림 (socketId → MediaStream) */
+    screenShareStreams,
     /** SFU 상태: 'idle' | 'initializing' | 'ready' | 'error' */
     sfuState,
     /** 로컬 Producer 목록 */

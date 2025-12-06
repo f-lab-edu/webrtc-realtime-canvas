@@ -307,11 +307,14 @@ class SFUService {
     }
 
     const kind = track.kind;
+    const isScreenShare = appData.screenShare === true;
 
-    // 동일 kind의 기존 Producer 확인
-    const existingProducer = this._getProducerByKind(kind);
+    // 동일 kind + screenShare 타입의 기존 Producer 확인
+    // 화면 공유와 일반 비디오는 별도로 관리
+    const existingProducer = this._getProducerByKindAndType(kind, isScreenShare);
     if (existingProducer) {
-      console.warn(`[SFUService] 기존 ${kind} Producer 존재, 교체 진행`);
+      const typeLabel = isScreenShare ? "화면 공유" : kind;
+      console.warn(`[SFUService] 기존 ${typeLabel} Producer 존재, 교체 진행`);
       await this.closeProducer(existingProducer.id);
     }
 
@@ -393,7 +396,7 @@ class SFUService {
         throw new Error(response.error);
       }
 
-      const { id, kind, rtpParameters } = response;
+      const { id, kind, rtpParameters, appData } = response;
 
       // Consumer 생성
       const consumer = await this.recvTransport.consume({
@@ -403,8 +406,9 @@ class SFUService {
         rtpParameters,
       });
 
-      // Consumer 저장 (producerSocketId 포함)
+      // Consumer 저장 (producerSocketId, appData 포함)
       consumer.producerSocketId = producerSocketId;
+      consumer.appData = appData || {}; // 화면 공유 여부 등 Producer 메타데이터
       this.consumers.set(consumer.id, consumer);
 
       // Consumer 이벤트 핸들러
@@ -663,7 +667,7 @@ class SFUService {
   // ============ Private 메서드 ============
 
   /**
-   * kind로 Producer 조회
+   * kind로 Producer 조회 (deprecated, _getProducerByKindAndType 사용 권장)
    * @param {string} kind - 'audio' | 'video'
    * @returns {Object|undefined}
    * @private
@@ -671,6 +675,24 @@ class SFUService {
   _getProducerByKind(kind) {
     for (const producer of this.producers.values()) {
       if (producer.kind === kind) {
+        return producer;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * kind + screenShare 타입으로 Producer 조회
+   * 화면 공유와 일반 비디오를 구분하여 관리
+   * @param {string} kind - 'audio' | 'video'
+   * @param {boolean} isScreenShare - 화면 공유 여부
+   * @returns {Object|undefined}
+   * @private
+   */
+  _getProducerByKindAndType(kind, isScreenShare = false) {
+    for (const producer of this.producers.values()) {
+      const producerIsScreenShare = producer.appData?.screenShare === true;
+      if (producer.kind === kind && producerIsScreenShare === isScreenShare) {
         return producer;
       }
     }

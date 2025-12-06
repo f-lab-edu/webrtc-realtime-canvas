@@ -54,8 +54,8 @@ export default function RoomPage() {
     cleanupMedia,
   } = useMediaContext();
 
-  // SFU 연결 관리 (remoteStreams는 useSFU에서 제공)
-  const { remoteStreams } = useSFU();
+  // SFU 연결 관리 (remoteStreams, screenShareStreams는 useSFU에서 제공)
+  const { remoteStreams, screenShareStreams } = useSFU();
 
   // 채팅 훅
   const { messages, unreadCount, sendMessage, clearUnreadCount } = useChat();
@@ -278,9 +278,9 @@ export default function RoomPage() {
                     isScreenShare={true}
                   />
                 ) : screenShareInfo?.isSharing ? (
-                  // 원격 화면 공유: remoteStreams에서 화면 공유자의 스트림 찾기
+                  // 원격 화면 공유: screenShareStreams에서 화면 공유자의 스트림 찾기
                   <VideoPlayer
-                    stream={remoteStreams.get(screenShareInfo.socketId)}
+                    stream={screenShareStreams.get(screenShareInfo.socketId)}
                     isLocal={false}
                     isVideoEnabled={true}
                     nickname={`${screenShareInfo.nickname}의 화면 공유`}

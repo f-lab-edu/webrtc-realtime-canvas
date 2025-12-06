@@ -45,9 +45,15 @@ export function SFUProvider({ children }) {
 
   /**
    * 원격 스트림 맵 (VideoGrid 호환용)
-   * socketId → MediaStream
+   * socketId → MediaStream (일반 비디오/오디오만)
    */
   const [remoteStreams, setRemoteStreams] = useState(new Map());
+
+  /**
+   * 원격 화면 공유 스트림 맵
+   * socketId → MediaStream (화면 공유만)
+   */
+  const [screenShareStreams, setScreenShareStreams] = useState(new Map());
 
   /** Transport 연결 상태 */
   const [connectionState, setConnectionState] = useState({
@@ -82,20 +88,26 @@ export function SFUProvider({ children }) {
   // ============ 콜백 함수들 ============
 
   /**
-   * Consumer 트랙을 remoteStreams에 추가
-   * VideoGrid 호환성을 위해 socketId별로 그룹화
+   * Consumer 트랙을 적절한 스트림 맵에 추가
+   * - 일반 비디오/오디오: remoteStreams
+   * - 화면 공유: screenShareStreams
    * @param {Object} consumer - Consumer 인스턴스
    * @private
    */
   const _addConsumerTrackToStream = useCallback((consumer) => {
-    const { track, producerSocketId } = consumer;
+    const { track, producerSocketId, appData } = consumer;
 
     if (!track || !producerSocketId) {
       console.warn("[SFUContext] Consumer에 track 또는 producerSocketId 없음");
       return;
     }
 
-    setRemoteStreams((prev) => {
+    // 화면 공유 여부 판단
+    const isScreenShare = appData?.screenShare === true;
+    const targetSetter = isScreenShare ? setScreenShareStreams : setRemoteStreams;
+    const streamType = isScreenShare ? "화면 공유" : "일반";
+
+    targetSetter((prev) => {
       const next = new Map(prev);
       let stream = next.get(producerSocketId);
 
@@ -108,12 +120,12 @@ export function SFUProvider({ children }) {
           t.stop();
         }
         stream.addTrack(track);
-        console.log(`[SFUContext] 기존 스트림에 ${track.kind} 트랙 추가: ${producerSocketId}`);
+        console.log(`[SFUContext] ${streamType} 스트림에 ${track.kind} 트랙 추가: ${producerSocketId}`);
       } else {
         // 새 스트림 생성
         stream = new MediaStream([track]);
         next.set(producerSocketId, stream);
-        console.log(`[SFUContext] 새 스트림 생성: ${producerSocketId}, ${track.kind}`);
+        console.log(`[SFUContext] ${streamType} 스트림 생성: ${producerSocketId}, ${track.kind}`);
       }
 
       return next;
@@ -410,9 +422,14 @@ export function SFUProvider({ children }) {
 
     // sfu:producer-closed - Producer 종료 알림
     const handleProducerClosed = (data) => {
-      const { producerId, producerSocketId } = data;
+      const { producerId, producerSocketId, appData: eventAppData } = data;
 
-      console.log("[SFUContext] Producer 종료 알림:", { producerId, producerSocketId });
+      console.log("[SFUContext] Producer 종료 알림:", { producerId, producerSocketId, appData: eventAppData });
+
+      // appData가 이벤트에 없으면 remoteProducers에서 조회 (fallback)
+      const producerInfo = remoteProducers.get(producerId);
+      const appData = eventAppData || producerInfo?.appData || {};
+      const isScreenShare = appData.screenShare === true;
 
       // remoteProducers에서 제거
       setRemoteProducers((prev) => {
@@ -426,8 +443,18 @@ export function SFUProvider({ children }) {
       const consumer = sfuService?.getConsumerByProducerId(producerId);
       if (consumer) {
         sfuService.closeConsumer(consumer.id);
+      }
 
-        // remoteStreams에서 트랙 제거
+      // 화면 공유면 screenShareStreams에서만 제거
+      if (isScreenShare) {
+        console.log("[SFUContext] 화면 공유 스트림 제거:", producerSocketId);
+        setScreenShareStreams((prev) => {
+          const next = new Map(prev);
+          next.delete(producerSocketId);
+          return next;
+        });
+      } else if (consumer) {
+        // 일반 비디오/오디오면 remoteStreams에서 해당 트랙만 제거
         setRemoteStreams((prev) => {
           const next = new Map(prev);
           const stream = next.get(producerSocketId);
@@ -545,6 +572,7 @@ export function SFUProvider({ children }) {
     localProducers,
     remoteProducers,
     remoteStreams,
+    screenShareStreams, // 원격 화면 공유 스트림 (socketId → MediaStream)
     connectionState,
     sfuState,
     error,
