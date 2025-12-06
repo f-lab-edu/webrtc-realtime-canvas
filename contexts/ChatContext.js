@@ -17,7 +17,10 @@ const ChatContext = createContext(null);
  */
 export function ChatProvider({ children }) {
   // RoomContext에서 필요한 값 가져오기
-  const { socketService, roomId, isConnected, nickname } = useRoomContext();
+  const { socketService, roomId, isConnected, nickname, participantNicknames } = useRoomContext();
+
+  // participantNicknames를 ref로 저장 (퇴장 시 닉네임 조회용)
+  const participantNicknamesRef = useRef(new Map());
 
   // ChatService 인스턴스 (ref로 관리하여 재생성 방지)
   const chatServiceRef = useRef(null);
@@ -132,6 +135,65 @@ export function ChatProvider({ children }) {
       }
     }
   }, [nickname, socketService]);
+
+  /**
+   * participantNicknames 변경 시 ref 업데이트
+   * (퇴장 이벤트에서 닉네임 조회에 사용)
+   */
+  useEffect(() => {
+    if (participantNicknames) {
+      participantNicknamesRef.current = new Map(participantNicknames);
+    }
+  }, [participantNicknames]);
+
+  /**
+   * 참가자 입/퇴장 이벤트 리스너
+   */
+  useEffect(() => {
+    if (!socketService || !isConnected || !chatServiceRef.current) {
+      return;
+    }
+
+    // 참가자 입장 핸들러
+    const handleParticipantJoined = (data) => {
+      const participantNickname = typeof data === "object" ? data.nickname : null;
+      if (!participantNickname) {
+        console.warn("[ChatContext] 입장 이벤트에 닉네임 없음");
+        return;
+      }
+
+      const systemMessage = chatServiceRef.current.createSystemMessage("joined", participantNickname);
+      if (systemMessage) {
+        setMessages((prev) => [...prev, systemMessage]);
+        console.log("[ChatContext] 참가자 입장 시스템 메시지 추가:", participantNickname);
+      }
+    };
+
+    // 참가자 퇴장 핸들러
+    const handleParticipantLeft = (socketId) => {
+      // participantNicknamesRef에서 닉네임 조회 (RoomContext가 삭제하기 전에 조회)
+      const participantNickname = participantNicknamesRef.current.get(socketId) || "익명";
+
+      const systemMessage = chatServiceRef.current.createSystemMessage("left", participantNickname);
+      if (systemMessage) {
+        setMessages((prev) => [...prev, systemMessage]);
+        console.log("[ChatContext] 참가자 퇴장 시스템 메시지 추가:", participantNickname);
+      }
+    };
+
+    socketService.on("room:participant-joined", handleParticipantJoined);
+    socketService.on("room:participant-left", handleParticipantLeft);
+
+    console.log("[ChatContext] 참가자 입/퇴장 이벤트 리스너 등록");
+
+    return () => {
+      if (socketService?.socket) {
+        socketService.off("room:participant-joined", handleParticipantJoined);
+        socketService.off("room:participant-left", handleParticipantLeft);
+        console.log("[ChatContext] 참가자 입/퇴장 이벤트 리스너 제거");
+      }
+    };
+  }, [socketService, isConnected]);
 
   /**
    * 메시지 전송
