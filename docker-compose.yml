@@ -1,0 +1,82 @@
+# ============================================
+# WebRTC SFU Server - Docker Compose
+# 목적: 부하 테스트 환경 (AWS t3.medium 유사)
+# ============================================
+
+services:
+  sfu-server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: webrtc-sfu-server
+
+    # ============================================
+    # 리소스 제한 (AWS t3.medium: 2 vCPU, 4GB RAM)
+    # ============================================
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+    # ============================================
+    # 포트 매핑
+    # ============================================
+    ports:
+      - "3005:3005" # 시그널링 서버 (Socket.io)
+      - "10000-10100:10000-10100/udp" # RTP 미디어 (UDP)
+      - "10000-10100:10000-10100/tcp" # RTP 미디어 (TCP 폴백)
+
+    # ============================================
+    # 환경변수
+    # ============================================
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - CORS_ORIGIN=http://localhost:3000
+      # mediasoup 네트워크 설정
+      - MEDIASOUP_LISTEN_IP=0.0.0.0
+      # Windows/Mac Docker Desktop: host.docker.internal
+      # Linux: 호스트 실제 IP 사용 (예: 192.168.1.100)
+      - MEDIASOUP_ANNOUNCED_IP=host.docker.internal
+      # 모니터링 설정
+      - ENABLE_MONITORING=true
+      - METRICS_INTERVAL_MS=1000
+      - METRICS_OUTPUT_DIR=/app/metrics
+      - METRICS_CONSOLE_OUTPUT=true
+
+    # ============================================
+    # 볼륨 마운트
+    # ============================================
+    volumes:
+      # 메트릭 CSV 파일 영속화
+      - ./metrics:/app/metrics
+      # 로그 파일 영속화
+      - ./logs:/app/logs
+
+    # ============================================
+    # 네트워크
+    # ============================================
+    networks:
+      - webrtc-network
+
+    # ============================================
+    # 재시작 정책
+    # ============================================
+    restart: unless-stopped
+
+    # ============================================
+    # 로깅 설정
+    # ============================================
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  webrtc-network:
+    driver: bridge
