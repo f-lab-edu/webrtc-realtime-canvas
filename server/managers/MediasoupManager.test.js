@@ -230,7 +230,7 @@ describe("MediasoupManager - Router 관리", () => {
 
       // Then: Router 생성 및 저장
       expect(router).toBeDefined();
-      expect(manager.roomRouters.has(roomId)).toBe(true);
+      expect(manager.getRouter(roomId)).toBeDefined();
     });
 
     it("roomId 없이 호출하면 에러를 던진다", async () => {
@@ -284,7 +284,7 @@ describe("MediasoupManager - Router 관리", () => {
       manager.closeRouter(roomId);
 
       // Then: Router 제거
-      expect(manager.roomRouters.has(roomId)).toBe(false);
+      expect(manager.getRouter(roomId)).toBeUndefined();
     });
   });
 });
@@ -324,8 +324,8 @@ describe("MediasoupManager - Transport 관리", () => {
 
       // Then: Transport 생성 및 저장
       expect(transport).toBeDefined();
-      expect(manager.transports.has(transport.id)).toBe(true);
-      expect(manager.peerTransports.has(socketId)).toBe(true);
+      expect(manager.getTransport(transport.id)).toBeDefined();
+      expect(manager.getTransportIdsBySocketId(socketId)).toBeDefined();
     });
 
     it("필수 파라미터 없이 호출하면 에러를 던진다", async () => {
@@ -364,7 +364,7 @@ describe("MediasoupManager - Transport 관리", () => {
       manager.closeTransport(transport.id);
 
       // Then: Transport 제거
-      expect(manager.transports.has(transport.id)).toBe(false);
+      expect(manager.getTransport(transport.id)).toBeUndefined();
     });
   });
 });
@@ -409,7 +409,7 @@ describe("MediasoupManager - Producer 관리", () => {
 
       // Then: Producer 생성 및 저장
       expect(producer).toBeDefined();
-      expect(manager.producers.has(producer.id)).toBe(true);
+      expect(manager.getProducer(producer.id)).toBeDefined();
     });
 
     it("필수 파라미터 없이 호출하면 에러를 던진다", async () => {
@@ -442,7 +442,7 @@ describe("MediasoupManager - Producer 관리", () => {
       manager.closeProducer(producer.id);
 
       // Then: Producer 제거
-      expect(manager.producers.has(producer.id)).toBe(false);
+      expect(manager.getProducer(producer.id)).toBeUndefined();
     });
   });
 });
@@ -496,7 +496,7 @@ describe("MediasoupManager - Consumer 관리", () => {
 
       // Then: Consumer 생성 및 저장
       expect(consumer).toBeDefined();
-      expect(manager.consumers.has(consumer.id)).toBe(true);
+      expect(manager.getConsumer(consumer.id)).toBeDefined();
     });
 
     it("canConsume이 false면 에러를 던진다", async () => {
@@ -532,7 +532,7 @@ describe("MediasoupManager - Consumer 관리", () => {
       manager.closeConsumer(consumer.id);
 
       // Then: Consumer 제거
-      expect(manager.consumers.has(consumer.id)).toBe(false);
+      expect(manager.getConsumer(consumer.id)).toBeUndefined();
     });
   });
 });
@@ -576,7 +576,7 @@ describe("MediasoupManager - 리소스 정리", () => {
       manager.cleanupPeer(socketId);
 
       // Then: 해당 참가자의 Transport 정리
-      expect(manager.peerTransports.has(socketId)).toBe(false);
+      expect(manager.getTransportIdsBySocketId(socketId)).toBeUndefined();
     });
   });
 
@@ -590,7 +590,7 @@ describe("MediasoupManager - 리소스 정리", () => {
       manager.cleanupRoom(roomId);
 
       // Then: Router 제거
-      expect(manager.roomRouters.has(roomId)).toBe(false);
+      expect(manager.getRouter(roomId)).toBeUndefined();
     });
   });
 
@@ -603,11 +603,12 @@ describe("MediasoupManager - 리소스 정리", () => {
       // When: 전체 정리
       manager.cleanup();
 
-      // Then: 모든 맵 초기화
-      expect(manager.roomRouters.size).toBe(0);
-      expect(manager.transports.size).toBe(0);
-      expect(manager.workers.length).toBe(0);
-      expect(manager.initialized).toBe(false);
+      // Then: 모든 맵 초기화 (getStats로 확인)
+      const stats = manager.getStats();
+      expect(stats.routers).toBe(0);
+      expect(stats.transports).toBe(0);
+      expect(stats.workers).toBe(0);
+      expect(stats.initialized).toBe(false);
     });
   });
 
