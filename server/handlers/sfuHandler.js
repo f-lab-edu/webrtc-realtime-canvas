@@ -156,7 +156,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         return callback({ error: "transportId, kind, rtpParameters는 필수입니다" });
       }
 
-      const transport = mediasoupManager.transports.get(transportId);
+      const transport = mediasoupManager.getTransport(transportId);
       if (!transport) {
         return callback({ error: `Transport를 찾을 수 없습니다: ${transportId}` });
       }
@@ -319,7 +319,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
 
       // canConsume 검증은 MediasoupManager에서 수행
       // 수신용 Transport 찾기 (해당 socketId의 Transport 중 하나 사용)
-      const peerTransportIds = mediasoupManager.peerTransports.get(socket.id);
+      const peerTransportIds = mediasoupManager.getTransportIdsBySocketId(socket.id);
       if (!peerTransportIds || peerTransportIds.size === 0) {
         return callback({
           error: "수신용 Transport가 없습니다. 먼저 create-recv-transport를 호출하세요.",
@@ -330,7 +330,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
       // 클라이언트에서 transportId를 명시적으로 전달하는 방식으로 개선 가능
       let recvTransport = null;
       for (const transportId of peerTransportIds) {
-        const transport = mediasoupManager.transports.get(transportId);
+        const transport = mediasoupManager.getTransport(transportId);
         // Send transport에는 이미 producer가 있으므로, producer가 없는 transport를 recv로 간주
         if (transport && transport.appData?.socketId === socket.id) {
           recvTransport = transport;
@@ -384,7 +384,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         return callback({ error: "Router가 존재하지 않습니다" });
       }
 
-      const transport = mediasoupManager.transports.get(transportId);
+      const transport = mediasoupManager.getTransport(transportId);
       if (!transport) {
         return callback({ error: `Transport를 찾을 수 없습니다: ${transportId}` });
       }
