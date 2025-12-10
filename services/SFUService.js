@@ -17,11 +17,11 @@
  * @see design/client-architecture.md 섹션 3.1
  */
 
-import SFUSocketAdapter from "./sfu/SFUSocketAdapter.js";
-import SFUDeviceManager from "./sfu/SFUDeviceManager.js";
-import SFUTransportManager from "./sfu/SFUTransportManager.js";
-import SFUProducerManager from "./sfu/SFUProducerManager.js";
 import SFUConsumerManager from "./sfu/SFUConsumerManager.js";
+import SFUDeviceManager from "./sfu/SFUDeviceManager.js";
+import SFUProducerManager from "./sfu/SFUProducerManager.js";
+import SFUSocketAdapter from "./sfu/SFUSocketAdapter.js";
+import SFUTransportManager from "./sfu/SFUTransportManager.js";
 
 class SFUService {
   constructor() {
