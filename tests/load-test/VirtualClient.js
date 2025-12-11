@@ -27,6 +27,7 @@ class VirtualClient {
    * @param {boolean} options.headless - Headless 모드 여부 (기본: true)
    * @param {number} options.width - 가짜 비디오 너비 (기본: 640)
    * @param {number} options.height - 가짜 비디오 높이 (기본: 480)
+   * @param {string} options.videoUrl - 비디오 HTTP URL (선택, 실제 트래픽 발생용)
    */
   constructor(options) {
     // 필수 파라미터 검증
@@ -46,6 +47,7 @@ class VirtualClient {
     this.headless = options.headless ?? true;
     this.videoWidth = options.width ?? 640;
     this.videoHeight = options.height ?? 480;
+    this.videoUrl = options.videoUrl ?? null;
 
     // 내부 상태
     this.browser = null;
@@ -106,6 +108,7 @@ class VirtualClient {
           width: this.videoWidth,
           height: this.videoHeight,
           fps: 30,
+          videoUrl: this.videoUrl,
         })
       );
       await this.page.evaluateOnNewDocument(getPermissionOverrideScript());
@@ -293,8 +296,50 @@ class VirtualClient {
       this.logger.warn(this.prefix, "방 UI 로드 확인 실패, 계속 진행");
     }
 
-    // 9. WebRTC 연결 안정화 대기
+    // 9. 비디오 로드 결과 확인 (지정된 경우)
+    if (this.videoUrl) {
+      await this._checkVideoLoadResult();
+    }
+
+    // 10. WebRTC 연결 안정화 대기
     await this._waitForWebRTCConnection();
+  }
+
+  /**
+   * 비디오 파일 로드 결과 확인
+   * @private
+   * @throws {Error} 비디오 파일 로드 실패 시
+   */
+  async _checkVideoLoadResult() {
+    this.logger.info(this.prefix, "비디오 파일 로드 결과 확인 중...");
+
+    // 브라우저에서 비디오 로드 결과 확인 (최대 5초 대기)
+    const maxWait = 5000;
+    const interval = 200;
+    let elapsed = 0;
+
+    while (elapsed < maxWait) {
+      const result = await this.page.evaluate(() => window.__videoLoadResult);
+
+      if (result?.success) {
+        this.logger.info(this.prefix, "비디오 파일 로드 성공");
+        return;
+      }
+
+      if (result?.error) {
+        // 로드 실패 - 오류 발생
+        const errorMsg = `비디오 파일 로드 실패: ${result.error}`;
+        this.logger.error(this.prefix, errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // 아직 결과 없음 - 대기
+      await new Promise((r) => setTimeout(r, interval));
+      elapsed += interval;
+    }
+
+    // 타임아웃 - 결과 없음 (getUserMedia가 호출되지 않았을 수 있음)
+    this.logger.warn(this.prefix, "비디오 로드 결과 확인 타임아웃 (getUserMedia 미호출 가능성)");
   }
 
   /**

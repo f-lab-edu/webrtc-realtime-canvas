@@ -16,10 +16,11 @@
  * @param {number} options.width - 비디오 너비 (기본: 640)
  * @param {number} options.height - 비디오 높이 (기본: 480)
  * @param {number} options.fps - 비디오 프레임레이트 (기본: 30)
+ * @param {string} options.videoUrl - 비디오 HTTP URL (선택, 실제 트래픽 발생용)
  * @returns {string} 브라우저에서 실행할 스크립트 문자열
  */
 export function getOverrideScript(options = {}) {
-  const { width = 640, height = 480, fps = 30 } = options;
+  const { width = 640, height = 480, fps = 30, videoUrl = null } = options;
 
   // 브라우저 컨텍스트에서 실행될 코드
   return `
@@ -28,11 +29,67 @@ export function getOverrideScript(options = {}) {
       if (window.__fakeMediaInitialized) return;
       window.__fakeMediaInitialized = true;
 
+      // 비디오 HTTP URL
+      const VIDEO_URL = ${videoUrl ? `"${videoUrl}"` : "null"};
+
+      // 비디오 로드 결과 (외부에서 확인용)
+      window.__videoLoadResult = { success: false, error: null, checked: false };
+
       // 원본 getUserMedia 저장
       const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 
-      // Canvas 기반 가짜 비디오 스트림 생성
-      function createFakeVideoTrack() {
+      // 비디오 파일 기반 스트림 생성 (실제 비트레이트 트래픽 발생)
+      async function createVideoFileTrack() {
+        return new Promise((resolve, reject) => {
+          const video = document.createElement('video');
+          video.src = VIDEO_URL;
+          video.loop = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.width = ${width};
+          video.height = ${height};
+
+          video.onloadedmetadata = async () => {
+            try {
+              await video.play();
+              console.log('[FakeMedia] 비디오 파일 재생 시작:', VIDEO_URL);
+
+              // captureStream으로 MediaStream 생성
+              const stream = video.captureStream(${fps});
+              const videoTrack = stream.getVideoTracks()[0];
+
+              if (videoTrack) {
+                // 비디오 로드 성공 기록
+                window.__videoLoadResult = { success: true, error: null, checked: false };
+                resolve(videoTrack);
+              } else {
+                const error = '비디오 트랙 생성 실패';
+                window.__videoLoadResult = { success: false, error, checked: false };
+                reject(new Error(error));
+              }
+            } catch (err) {
+              window.__videoLoadResult = { success: false, error: err.message, checked: false };
+              reject(err);
+            }
+          };
+
+          video.onerror = () => {
+            const error = '비디오 파일 로드 실패: ' + VIDEO_URL;
+            console.error('[FakeMedia]', error);
+            window.__videoLoadResult = { success: false, error, checked: false };
+            reject(new Error(error));
+          };
+
+          // DOM에 숨겨서 추가 (재생을 위해 필요)
+          video.style.position = 'absolute';
+          video.style.top = '-9999px';
+          video.style.left = '-9999px';
+          document.body.appendChild(video);
+        });
+      }
+
+      // Canvas 기반 가짜 비디오 스트림 생성 (기본 패턴)
+      function createCanvasVideoTrack() {
         const canvas = document.createElement('canvas');
         canvas.width = ${width};
         canvas.height = ${height};
@@ -74,6 +131,15 @@ export function getOverrideScript(options = {}) {
         return stream.getVideoTracks()[0];
       }
 
+      // 비디오 트랙 생성 (파일 지정 시 실패하면 오류 발생, 폴백 없음)
+      async function createFakeVideoTrack() {
+        if (VIDEO_URL) {
+          // 비디오 파일이 지정된 경우 반드시 성공해야 함 (폴백 없음)
+          return await createVideoFileTrack();
+        }
+        return createCanvasVideoTrack();
+      }
+
       // AudioContext 기반 가짜 오디오 스트림 생성
       function createFakeAudioTrack() {
         const audioCtx = new AudioContext();
@@ -103,11 +169,11 @@ export function getOverrideScript(options = {}) {
 
         const tracks = [];
 
-        // 비디오 요청 시
+        // 비디오 요청 시 (async로 비디오 파일 로드 대기)
         if (constraints.video) {
-          const videoTrack = createFakeVideoTrack();
+          const videoTrack = await createFakeVideoTrack();
           tracks.push(videoTrack);
-          console.log('[FakeMedia] 가짜 비디오 트랙 생성됨');
+          console.log('[FakeMedia] 가짜 비디오 트랙 생성됨', VIDEO_URL ? '(파일 소스)' : '(Canvas 패턴)');
         }
 
         // 오디오 요청 시

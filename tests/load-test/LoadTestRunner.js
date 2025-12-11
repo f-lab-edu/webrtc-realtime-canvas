@@ -8,7 +8,7 @@
  * @see REQ-017: 테스트 시나리오 설정
  */
 
-import { closeLogger, initLogger } from "./utils/logger.js";
+import { getLogger } from "./utils/logger.js";
 import VirtualClient from "./VirtualClient.js";
 
 /**
@@ -40,6 +40,10 @@ class LoadTestRunner {
     this.durationMinutes = options.durationMinutes ?? 5;
     this.headless = options.headless ?? true;
 
+    // 로거 (cli.js에서 초기화됨)
+    this.logger = getLogger();
+    this.prefix = "LoadTestRunner";
+
     // 클라이언트 풀
     this.clients = new Map(); // userId -> VirtualClient
 
@@ -67,29 +71,22 @@ class LoadTestRunner {
    */
   async start() {
     if (this.running) {
-      console.log("[LoadTestRunner] 이미 실행 중");
+      this.logger.info(this.prefix, "이미 실행 중");
       return;
     }
-
-    // 로거 초기화 (덮어쓰기 모드)
-    initLogger({
-      logDir: "./logs",
-      logFile: "VirtualClient.log",
-      overwrite: true,
-    });
 
     this.running = true;
     this.startTime = Date.now();
     this.metrics = [];
 
-    console.log("═".repeat(60));
-    console.log("[LoadTestRunner] 부하 테스트 시작");
-    console.log(`  서버: ${this.serverUrl}`);
-    console.log(`  방 ID: ${this.roomId}`);
-    console.log(`  목표 사용자: ${this.targetUsers}명`);
-    console.log(`  사용자 추가 간격: ${this.rampUpSeconds}초`);
-    console.log(`  테스트 시간: ${this.durationMinutes}분`);
-    console.log("═".repeat(60));
+    this.logger.info(this.prefix, "═".repeat(60));
+    this.logger.info(this.prefix, "부하 테스트 시작");
+    this.logger.info(this.prefix, `  서버: ${this.serverUrl}`);
+    this.logger.info(this.prefix, `  방 ID: ${this.roomId}`);
+    this.logger.info(this.prefix, `  목표 사용자: ${this.targetUsers}명`);
+    this.logger.info(this.prefix, `  사용자 추가 간격: ${this.rampUpSeconds}초`);
+    this.logger.info(this.prefix, `  테스트 시간: ${this.durationMinutes}분`);
+    this.logger.info(this.prefix, "═".repeat(60));
 
     // 점진적 부하 증가 시작
     await this._startRampUp();
@@ -108,7 +105,7 @@ class LoadTestRunner {
   async stop() {
     if (!this.running) return;
 
-    console.log("\n[LoadTestRunner] 테스트 종료 중...");
+    this.logger.info(this.prefix, "테스트 종료 중...");
     this.running = false;
 
     // 타이머 정리
@@ -130,7 +127,7 @@ class LoadTestRunner {
     for (const [userId, client] of this.clients) {
       disconnectPromises.push(
         client.disconnect().catch((err) => {
-          console.error(`[LoadTestRunner] ${userId} 연결 해제 실패:`, err.message);
+          this.logger.error(this.prefix, `${userId} 연결 해제 실패: ${err.message}`);
         })
       );
     }
@@ -140,17 +137,14 @@ class LoadTestRunner {
     // 결과 리포트 생성
     const report = this.generateReport();
 
-    console.log("\n[LoadTestRunner] 테스트 완료");
-    console.log("═".repeat(60));
-    console.log(report.summary);
-    console.log("═".repeat(60));
+    this.logger.info(this.prefix, "테스트 완료");
+    this.logger.info(this.prefix, "═".repeat(60));
+    this.logger.info(this.prefix, report.summary);
+    this.logger.info(this.prefix, "═".repeat(60));
 
     if (this.onComplete) {
       this.onComplete(report);
     }
-
-    // 로거 종료
-    closeLogger();
 
     return report;
   }
@@ -173,7 +167,7 @@ class LoadTestRunner {
             clearInterval(this.rampUpTimer);
             this.rampUpTimer = null;
           }
-          console.log(`\n[LoadTestRunner] 목표 사용자 수 도달: ${this.clients.size}명`);
+          this.logger.info(this.prefix, `목표 사용자 수 도달: ${this.clients.size}명`);
           return;
         }
 
@@ -201,13 +195,13 @@ class LoadTestRunner {
       await client.connect();
       this.clients.set(userId, client);
 
-      console.log(`[LoadTestRunner] 사용자 추가: ${userId} (현재 ${this.clients.size}명)`);
+      this.logger.info(this.prefix, `사용자 추가: ${userId} (현재 ${this.clients.size}명)`);
 
       if (this.onUserAdded) {
         this.onUserAdded({ userId, totalUsers: this.clients.size });
       }
     } catch (error) {
-      console.error(`[LoadTestRunner] 사용자 추가 실패: ${userId}`, error.message);
+      this.logger.error(this.prefix, `사용자 추가 실패: ${userId} - ${error.message}`);
 
       if (this.onError) {
         this.onError({ userId, error: error.message });
@@ -273,8 +267,9 @@ class LoadTestRunner {
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
 
-    console.log(
-      `\n[Metrics ${minutes}:${seconds.toString().padStart(2, "0")}] ` +
+    this.logger.info(
+      this.prefix,
+      `[Metrics ${minutes}:${seconds.toString().padStart(2, "0")}] ` +
         `클라이언트: ${snapshot.connectedClients}/${snapshot.totalClients} ` +
         `(실패: ${snapshot.failedClients})`
     );
@@ -393,27 +388,20 @@ class LoadTestRunner {
    */
   async runStress() {
     if (this.running) {
-      console.log("[LoadTestRunner] 이미 실행 중");
+      this.logger.info(this.prefix, "이미 실행 중");
       return;
     }
-
-    // 로거 초기화 (덮어쓰기 모드)
-    initLogger({
-      logDir: "./logs",
-      logFile: "VirtualClient.log",
-      overwrite: true,
-    });
 
     this.running = true;
     this.startTime = Date.now();
     this.metrics = [];
 
-    console.log("═".repeat(60));
-    console.log("[LoadTestRunner] 스트레스 테스트 시작");
-    console.log(`  서버: ${this.serverUrl}`);
-    console.log(`  방 ID: ${this.roomId}`);
-    console.log(`  동시 사용자: ${this.targetUsers}명`);
-    console.log("═".repeat(60));
+    this.logger.info(this.prefix, "═".repeat(60));
+    this.logger.info(this.prefix, "스트레스 테스트 시작");
+    this.logger.info(this.prefix, `  서버: ${this.serverUrl}`);
+    this.logger.info(this.prefix, `  방 ID: ${this.roomId}`);
+    this.logger.info(this.prefix, `  동시 사용자: ${this.targetUsers}명`);
+    this.logger.info(this.prefix, "═".repeat(60));
 
     // 모든 사용자 동시 추가
     const promises = [];
