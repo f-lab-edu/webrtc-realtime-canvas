@@ -33,7 +33,7 @@ export const workerSettings = {
     // 'simulcast' // Simulcast 디버깅 (필요 시 활성화)
   ],
   rtcMinPort: 10000,
-  rtcMaxPort: 10100,
+  rtcMaxPort: 10200, // 201개 포트 (20명 동시 접속 + 여유)
 };
 
 /**

@@ -24,19 +24,22 @@ services:
 
     # ============================================
     # 포트 매핑
+    # 참고: Windows Hyper-V가 일부 포트를 예약함
+    # netsh interface ipv4 show excludedportrange protocol=tcp 로 확인 가능
     # ============================================
     ports:
-      - "3005:3005" # 시그널링 서버 (Socket.io)
-      - "10000-10100:10000-10100/udp" # RTP 미디어 (UDP)
-      - "10000-10100:10000-10100/tcp" # RTP 미디어 (TCP 폴백)
+      - "3100:3100" # 시그널링 서버 (Socket.io)
+      - "10000-10200:10000-10200/udp" # RTP 미디어 (UDP)
+      - "10000-10200:10000-10200/tcp" # RTP 미디어 (TCP 폴백)
 
     # ============================================
     # 환경변수
     # ============================================
     environment:
       - NODE_ENV=production
-      - PORT=3005
-      - CORS_ORIGIN=http://localhost:3000
+      - PORT=3100
+      # Windows Hyper-V 포트 예약 문제로 3200 사용
+      - CORS_ORIGIN=http://localhost:3200
       # mediasoup 네트워크 설정
       - MEDIASOUP_LISTEN_IP=0.0.0.0
       # Windows/Mac Docker Desktop: host.docker.internal
