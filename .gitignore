@@ -258,3 +258,4 @@ gemini.md
 *.backup
 
 metrics/**
+public/video/**
