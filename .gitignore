@@ -256,3 +256,5 @@ claude.md
 claude.md
 gemini.md
 *.backup
+
+metrics/**

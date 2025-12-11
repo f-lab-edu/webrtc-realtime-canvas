@@ -16,7 +16,9 @@
     "server:dev": "nodemon server/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "load-test": "node tests/load-test/cli.js",
+    "load-test:single": "node tests/load-test/cli.js single"
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.2.10",
@@ -28,7 +30,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "fabric": "^6.7.1",
-    "lucide-react": "^0.548.0",
+    "lucide-react": "^0.559.0",
     "mediasoup": "^3.19.12",
     "mediasoup-client": "^3.18.1",
     "next": "^16.0.7",
@@ -42,18 +44,20 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.2",
+    "@biomejs/biome": "^2.3.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10",
     "baseline-browser-mapping": "^2.9.0",
+    "commander": "^14.0.2",
     "eslint": "^9",
     "eslint-config-next": "^16.0.1",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "postcss": "^8",
+    "puppeteer": "^24.32.1",
     "tailwindcss": "^4.1.16"
   },
   "type": "module"

@@ -255,8 +255,8 @@ class SFUMonitor {
    *
    * @private
    * @param {string} workerId - Worker 식별자 (PID)
-   * @param {number} currentUtime - 현재 ru_utime (밀리초)
-   * @param {number} currentStime - 현재 ru_stime (밀리초)
+   * @param {number} currentUtime - 현재 ru_utime (밀리초, ms)
+   * @param {number} currentStime - 현재 ru_stime (밀리초, ms)
    * @param {number} currentTimestamp - 현재 타임스탬프
    * @returns {number} CPU 사용률 (0-100)
    */
@@ -284,7 +284,8 @@ class SFUMonitor {
       return 0;
     }
 
-    // CPU 사용률 계산 (밀리초 단위이므로 직접 나눗셈)
+    // CPU 사용률 계산 (mediasoup이 이미 밀리초로 변환하므로 직접 나눗셈)
+    // 참고: Worker.cpp에서 (tv_sec * 1000) + (tv_usec / 1000) 형태로 ms 변환됨
     const cpuPercent = ((deltaUtime + deltaStime) / elapsedWallTime) * 100;
 
     // 0-100 범위로 클램핑

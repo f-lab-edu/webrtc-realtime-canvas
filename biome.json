@@ -18,7 +18,8 @@
       "server/**/*.js",
       "services/**/*.js",
       "*.js",
-      "*.json"
+      "*.json",
+      "tests/**/*.js"
     ]
   },
   "formatter": {
