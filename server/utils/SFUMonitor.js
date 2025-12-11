@@ -210,12 +210,7 @@ class SFUMonitor {
         const now = Date.now();
 
         // CPU 사용률 계산
-        const cpuPercent = this._calculateCpuPercent(
-          workerId,
-          usage.ru_utime,
-          usage.ru_stime,
-          now
-        );
+        const cpuPercent = this._calculateCpuPercent(workerId, usage.ru_utime, usage.ru_stime, now);
 
         // 메모리 (ru_maxrss는 바이트 단위)
         const memoryMb = Math.round((usage.ru_maxrss / 1024 / 1024) * 100) / 100;
@@ -369,7 +364,9 @@ class SFUMonitor {
     if (workerMetrics.workerDetails.length > 0) {
       console.log("┌─ Worker 상세");
       for (const worker of workerMetrics.workerDetails) {
-        console.log(`│  PID ${worker.pid}: CPU ${worker.cpuPercent}% | 메모리 ${worker.memoryMb}MB`);
+        console.log(
+          `│  PID ${worker.pid}: CPU ${worker.cpuPercent}% | 메모리 ${worker.memoryMb}MB`
+        );
       }
       console.log("└─");
     }

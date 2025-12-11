@@ -162,7 +162,10 @@ export function ChatProvider({ children }) {
         return;
       }
 
-      const systemMessage = chatServiceRef.current.createSystemMessage("joined", participantNickname);
+      const systemMessage = chatServiceRef.current.createSystemMessage(
+        "joined",
+        participantNickname
+      );
       if (systemMessage) {
         setMessages((prev) => [...prev, systemMessage]);
         console.log("[ChatContext] 참가자 입장 시스템 메시지 추가:", participantNickname);

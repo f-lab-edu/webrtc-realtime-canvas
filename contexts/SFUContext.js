@@ -120,7 +120,9 @@ export function SFUProvider({ children }) {
           t.stop();
         }
         stream.addTrack(track);
-        console.log(`[SFUContext] ${streamType} 스트림에 ${track.kind} 트랙 추가: ${producerSocketId}`);
+        console.log(
+          `[SFUContext] ${streamType} 스트림에 ${track.kind} 트랙 추가: ${producerSocketId}`
+        );
       } else {
         // 새 스트림 생성
         stream = new MediaStream([track]);
@@ -424,7 +426,11 @@ export function SFUProvider({ children }) {
     const handleProducerClosed = (data) => {
       const { producerId, producerSocketId, appData: eventAppData } = data;
 
-      console.log("[SFUContext] Producer 종료 알림:", { producerId, producerSocketId, appData: eventAppData });
+      console.log("[SFUContext] Producer 종료 알림:", {
+        producerId,
+        producerSocketId,
+        appData: eventAppData,
+      });
 
       // appData가 이벤트에 없으면 remoteProducers에서 조회 (fallback)
       const producerInfo = remoteProducers.get(producerId);

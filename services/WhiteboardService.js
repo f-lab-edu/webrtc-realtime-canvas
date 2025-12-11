@@ -379,9 +379,7 @@ class WhiteboardService {
 
         case "object:modified": {
           // 기존 객체 찾아서 수정 (역정규화된 데이터 사용)
-          const objToModify = this.canvas
-            .getObjects()
-            .find((o) => o.id === denormalizedData.id);
+          const objToModify = this.canvas.getObjects().find((o) => o.id === denormalizedData.id);
           if (objToModify) {
             objToModify.set(denormalizedData);
             this.canvas.renderAll();

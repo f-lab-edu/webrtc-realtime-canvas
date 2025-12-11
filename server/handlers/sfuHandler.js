@@ -291,7 +291,9 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         });
       }
 
-      console.log(`[sfu:close-producer] producerId=${producerId}, appData=${JSON.stringify(producerAppData)}`);
+      console.log(
+        `[sfu:close-producer] producerId=${producerId}, appData=${JSON.stringify(producerAppData)}`
+      );
 
       callback({ success: true });
     } catch (error) {
