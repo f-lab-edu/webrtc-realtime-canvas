@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "node -e \"require('fs').copyFileSync('.env.local.local', '.env.local')\" && next dev",
+    "dev:docker": "node -e \"require('fs').copyFileSync('.env.local.docker', '.env.local')\" && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -18,7 +20,10 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "load-test": "node tests/load-test/cli.js",
-    "load-test:single": "node tests/load-test/cli.js single"
+    "load-test:single": "node tests/load-test/cli.js single",
+    "test:load:local": "node -e \"require('fs').copyFileSync('.env.local.local', '.env.local')\" && node tests/load-test/cli.js",
+    "test:load:docker": "node -e \"require('fs').copyFileSync('.env.local.docker', '.env.local')\" && node tests/load-test/cli.js",
+    "dev:pinggy": "node -e \"require('fs').copyFileSync('.env.local.pinggy', '.env.local')\" && next dev"
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.2.10",
