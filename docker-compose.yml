@@ -38,13 +38,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3100
-      # Windows Hyper-V 포트 예약 문제로 3200 사용
-      - CORS_ORIGIN=http://localhost:3200
+      # CORS 설정 (Pinggy 터널 사용 시 * 또는 터널 URL로 변경)
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
       # mediasoup 네트워크 설정
       - MEDIASOUP_LISTEN_IP=0.0.0.0
-      # Windows/Mac Docker Desktop: host.docker.internal
-      # Linux: 호스트 실제 IP 사용 (예: 192.168.1.100)
-      - MEDIASOUP_ANNOUNCED_IP=host.docker.internal
+      # 로컬 테스트: 127.0.0.1 (브라우저와 Docker가 같은 호스트)
+      # Pinggy UDP 터널 사용 시: 터널 도메인으로 변경 필요
+      # 예: MEDIASOUP_ANNOUNCED_IP=xxx.t.pinggy.online
+      - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
       # 모니터링 설정
       - ENABLE_MONITORING=true
       - METRICS_INTERVAL_MS=1000
