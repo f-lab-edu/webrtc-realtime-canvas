@@ -38,10 +38,15 @@ export const workerSettings = {
 
 /**
  * Worker 풀 크기
+ * - 환경변수 MEDIASOUP_NUM_WORKERS: 명시적 지정 (Docker 환경에서 권장)
  * - 개발 환경: 1개 (디버깅 용이)
  * - 운영 환경: CPU 코어 수 (성능 최적화)
  */
-export const numWorkers = isProduction ? os.cpus().length : 1;
+export const numWorkers = process.env.MEDIASOUP_NUM_WORKERS
+  ? Number.parseInt(process.env.MEDIASOUP_NUM_WORKERS, 10)
+  : isProduction
+    ? os.cpus().length
+    : 1;
 
 /**
  * Router 설정 - 미디어 코덱
@@ -146,6 +151,37 @@ export const iceRetryConfig = {
 };
 
 /**
+ * WebRtcServer 활성화 여부
+ * - true: 단일 포트로 모든 Transport 다중화 (Pinggy 터널링에 적합)
+ * - false: 기존 방식 (각 Transport별 개별 포트)
+ */
+export const webRtcServerEnabled =
+  process.env.MEDIASOUP_WEBRTC_SERVER_ENABLED === "true";
+
+/**
+ * WebRtcServer 설정
+ * - 단일 UDP/TCP 포트로 모든 Transport 다중화
+ * - Pinggy 터널링과 호환
+ * - announcedAddress: 클라이언트가 연결할 공인 주소:포트
+ */
+export const webRtcServerOptions = {
+  listenInfos: [
+    {
+      protocol: "udp",
+      ip: process.env.MEDIASOUP_WEBRTC_SERVER_LISTEN_IP || "0.0.0.0",
+      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "44444", 10),
+      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:44444",
+    },
+    {
+      protocol: "tcp",
+      ip: process.env.MEDIASOUP_WEBRTC_SERVER_LISTEN_IP || "0.0.0.0",
+      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "44444", 10),
+      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:44444",
+    },
+  ],
+};
+
+/**
  * 전체 설정 객체 (하위 호환성)
  */
 const mediasoupConfig = {
@@ -155,6 +191,8 @@ const mediasoupConfig = {
   webRtcTransportOptions,
   simulcastEncodings,
   iceRetryConfig,
+  webRtcServerEnabled,
+  webRtcServerOptions,
 };
 
 export default mediasoupConfig;
