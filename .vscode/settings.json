@@ -54,6 +54,7 @@
     "canplaythrough",
     "loadedmetadata",
     "mediasoup",
+    "pinggy",
     "unmuted",
     "webrtc"
   ]

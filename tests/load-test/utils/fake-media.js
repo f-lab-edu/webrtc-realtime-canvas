@@ -49,21 +49,26 @@ export function getOverrideScript(options = {}) {
           video.width = ${width};
           video.height = ${height};
 
-          video.onloadedmetadata = async () => {
+          // oncanplay: 첫 프레임이 실제로 렌더링 가능한 시점 (onloadedmetadata보다 안정적)
+          video.oncanplay = async () => {
             try {
               await video.play();
               console.log('[FakeMedia] 비디오 파일 재생 시작:', VIDEO_URL);
+
+              // 첫 프레임이 실제로 렌더링될 때까지 대기
+              await new Promise(r => requestAnimationFrame(r));
 
               // captureStream으로 MediaStream 생성
               const stream = video.captureStream(${fps});
               const videoTrack = stream.getVideoTracks()[0];
 
-              if (videoTrack) {
+              if (videoTrack && videoTrack.readyState === 'live') {
                 // 비디오 로드 성공 기록
                 window.__videoLoadResult = { success: true, error: null, checked: false };
+                console.log('[FakeMedia] 비디오 트랙 생성 완료 (readyState: live)');
                 resolve(videoTrack);
               } else {
-                const error = '비디오 트랙 생성 실패';
+                const error = '비디오 트랙이 live 상태가 아님: ' + (videoTrack ? videoTrack.readyState : 'null');
                 window.__videoLoadResult = { success: false, error, checked: false };
                 reject(new Error(error));
               }
@@ -95,6 +100,12 @@ export function getOverrideScript(options = {}) {
         canvas.height = ${height};
         const ctx = canvas.getContext('2d');
 
+        // Canvas를 DOM에 추가 (Headless Chrome에서 렌더링 보장)
+        canvas.style.position = 'absolute';
+        canvas.style.top = '-9999px';
+        canvas.style.left = '-9999px';
+        document.body.appendChild(canvas);
+
         let hue = 0;
         let frameCount = 0;
 
@@ -122,12 +133,16 @@ export function getOverrideScript(options = {}) {
           ctx.fill();
         }
 
-        // 프레임레이트에 맞춰 그리기
-        setInterval(draw, 1000 / ${fps});
-        draw(); // 첫 프레임 즉시 그리기
+        // 첫 프레임을 먼저 그린 후 captureStream 호출 (순서 중요!)
+        draw();
 
-        // MediaStream 생성
+        // MediaStream 생성 (첫 프레임 렌더링 후)
         const stream = canvas.captureStream(${fps});
+
+        // 이후 지속적인 프레임 생성
+        setInterval(draw, 1000 / ${fps});
+
+        console.log('[FakeMedia] Canvas 스트림 생성 완료 (DOM 추가됨)');
         return stream.getVideoTracks()[0];
       }
 

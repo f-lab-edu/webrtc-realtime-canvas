@@ -64,6 +64,14 @@ export function SFUProvider({ children }) {
   /** SFU 초기화 상태 */
   const [sfuState, setSfuState] = useState("idle"); // 'idle' | 'initializing' | 'ready' | 'error'
 
+  // 부하 테스트용: SFU 연결 상태를 window에 노출
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__sfuConnectionState = connectionState;
+      window.__sfuState = sfuState;
+    }
+  }, [connectionState, sfuState]);
+
   /** 에러 메시지 */
   const [error, setError] = useState(null);
 

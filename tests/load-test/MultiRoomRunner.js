@@ -473,19 +473,19 @@ class MultiRoomRunner {
     }
 
     const summary = `
-다중 방 테스트 결과 요약
-────────────────────────────────────
-총 테스트 시간: ${Math.floor(totalDuration / 1000)}초
-방 개수: ${this.roomCount}개
-목표 사용자 수: ${this.targetUsers}명
-실제 생성 수: ${totalClients}명
-연결 성공: ${connectedCount}명
-연결 실패: ${totalClients - connectedCount}명
-성공률: ${totalClients > 0 ? ((connectedCount / totalClients) * 100).toFixed(1) : 0}%
+      다중 방 테스트 결과 요약
+      ────────────────────────────────────
+      총 테스트 시간: ${Math.floor(totalDuration / 1000)}초
+      방 개수: ${this.roomCount}개
+      목표 사용자 수: ${this.targetUsers}명
+      실제 생성 수: ${totalClients}명
+      연결 성공: ${connectedCount}명
+      연결 실패: ${totalClients - connectedCount}명
+      성공률: ${totalClients > 0 ? ((connectedCount / totalClients) * 100).toFixed(1) : 0}%
 
-방별 현황:
-${roomSummaries.map((r) => `  ${r.roomId}: ${r.connected}/${r.total}명 (목표: ${r.target}명)`).join("\n")}
-────────────────────────────────────
+      방별 현황:
+      ${roomSummaries.map((r) => `  ${r.roomId}: ${r.connected}/${r.total}명 (목표: ${r.target}명)`).join("\n")}
+      ────────────────────────────────────
     `.trim();
 
     return {

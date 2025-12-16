@@ -13,6 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import serverLogger from "./logger.js";
 
 class SFUMonitor {
   /**
@@ -44,7 +45,10 @@ class SFUMonitor {
     // Map<workerId, { utime, stime, timestamp }>
     this.previousResourceUsage = new Map();
 
-    console.log("[SFUMonitor] 인스턴스 생성");
+    // RTP 비트레이트 계산용 이전 값 저장
+    this.previousRtpStats = null;
+
+    serverLogger.info("SFUMonitor", "인스턴스 생성");
   }
 
   /**
@@ -52,7 +56,7 @@ class SFUMonitor {
    */
   async start() {
     if (this.isRunning) {
-      console.warn("[SFUMonitor] 이미 실행 중입니다.");
+      serverLogger.warn("SFUMonitor", "이미 실행 중입니다.");
       return;
     }
 
@@ -66,8 +70,8 @@ class SFUMonitor {
     this.isRunning = true;
     this.intervalId = setInterval(() => this._collectAndRecord(), this.intervalMs);
 
-    console.log(`[SFUMonitor] 모니터링 시작 (간격: ${this.intervalMs}ms)`);
-    console.log(`[SFUMonitor] CSV 파일: ${this.csvFilepath}`);
+    serverLogger.info("SFUMonitor", `모니터링 시작 (간격: ${this.intervalMs}ms)`);
+    serverLogger.info("SFUMonitor", `CSV 파일: ${this.csvFilepath}`);
   }
 
   /**
@@ -87,8 +91,8 @@ class SFUMonitor {
       this.csvStream = null;
     }
 
-    console.log("[SFUMonitor] 모니터링 중지");
-    console.log(`[SFUMonitor] CSV 파일 저장 완료: ${this.csvFilepath}`);
+    serverLogger.info("SFUMonitor", "모니터링 중지");
+    serverLogger.info("SFUMonitor", `CSV 파일 저장 완료: ${this.csvFilepath}`);
   }
 
   /**
@@ -98,7 +102,7 @@ class SFUMonitor {
   _ensureOutputDir() {
     if (!fs.existsSync(this.outputDir)) {
       fs.mkdirSync(this.outputDir, { recursive: true });
-      console.log(`[SFUMonitor] 메트릭 디렉토리 생성: ${this.outputDir}`);
+      serverLogger.info("SFUMonitor", `메트릭 디렉토리 생성: ${this.outputDir}`);
     }
   }
 
@@ -129,6 +133,20 @@ class SFUMonitor {
       "transports",
       "producers",
       "consumers",
+      // RTP 전송량 통계
+      "rtp_bytes_received",
+      "rtp_bytes_sent",
+      "rtp_inbound_bitrate",
+      "rtp_outbound_bitrate",
+      "rtp_active_producers",
+      "rtp_active_consumers",
+      // 품질 지표 (QoE)
+      "packets_received",
+      "packets_sent",
+      "packets_lost",
+      "packet_loss_rate_percent",
+      "avg_jitter_ms",
+      "avg_rtt_ms",
       // Worker별 상세 (JSON)
       "worker_details",
     ].join(",");
@@ -152,7 +170,7 @@ class SFUMonitor {
         this._printToConsole(metrics);
       }
     } catch (error) {
-      console.error("[SFUMonitor] 메트릭 수집 실패:", error.message);
+      serverLogger.error("SFUMonitor", `메트릭 수집 실패: ${error.message}`);
     }
   }
 
@@ -179,12 +197,16 @@ class SFUMonitor {
     // 3. SFU 리소스 개수
     const stats = this.manager.getStats();
 
+    // 4. RTP 전송량 수집
+    const rtpStats = await this._collectRtpStats();
+
     return {
       timestamp,
       elapsedMs,
       workerMetrics,
       nodeMemory,
       stats,
+      rtpStats,
     };
   }
 
@@ -212,8 +234,13 @@ class SFUMonitor {
         // CPU 사용률 계산
         const cpuPercent = this._calculateCpuPercent(workerId, usage.ru_utime, usage.ru_stime, now);
 
-        // 메모리 (ru_maxrss는 바이트 단위)
-        const memoryMb = Math.round((usage.ru_maxrss / 1024 / 1024) * 100) / 100;
+        // 메모리 계산 (ru_maxrss 단위가 플랫폼마다 다름)
+        // libuv: Linux/Windows = KB, macOS/BSD = bytes
+        // 참고: https://docs.libuv.org/en/v1.x/misc.html
+        const isMacOS = process.platform === "darwin";
+        const memoryMb = isMacOS
+          ? Math.round((usage.ru_maxrss / 1024 / 1024) * 100) / 100  // bytes → MB
+          : Math.round((usage.ru_maxrss / 1024) * 100) / 100;        // KB → MB
 
         totalCpuPercent += cpuPercent;
         totalMemoryMb += memoryMb;
@@ -226,7 +253,7 @@ class SFUMonitor {
           ruStime: usage.ru_stime,
         });
       } catch (error) {
-        console.error(`[SFUMonitor] Worker ${worker.pid} 메트릭 수집 실패:`, error.message);
+        serverLogger.error("SFUMonitor", `Worker ${worker.pid} 메트릭 수집 실패: ${error.message}`);
       }
     }
 
@@ -288,6 +315,140 @@ class SFUMonitor {
   }
 
   /**
+   * RTP 전송량 및 품질 통계 수집
+   *
+   * Producer: 클라이언트 → SFU (bytesReceived, jitter, packetsLost, roundTripTime)
+   * Consumer: SFU → 클라이언트 (bytesSent, packetsLost, roundTripTime)
+   *
+   * @private
+   * @returns {Promise<Object>} RTP 통계
+   */
+  async _collectRtpStats() {
+    const producers = this.manager.producerManager.getAll();
+    const consumers = this.manager.consumerManager.getAll();
+    const now = Date.now();
+
+    let totalBytesReceived = 0;
+    let totalBytesSent = 0;
+    let activeProducers = 0;
+    let activeConsumers = 0;
+
+    // 품질 지표 집계용
+    let totalPacketsReceived = 0;
+    let totalPacketsSent = 0;
+    let totalPacketsLost = 0;
+    let jitterSum = 0;
+    let jitterCount = 0;
+    let rttSum = 0;
+    let rttCount = 0;
+
+    // Producer 통계 (서버로 들어오는 RTP)
+    for (const producer of producers) {
+      if (producer.closed) continue;
+      try {
+        const stats = await producer.getStats();
+        for (const stat of stats) {
+          if (stat.type === "inbound-rtp") {
+            totalBytesReceived += stat.byteCount || 0;
+            totalPacketsReceived += stat.packetCount || 0;
+            totalPacketsLost += stat.packetsLost || 0;
+
+            // Jitter (Producer inbound-rtp에서만 제공)
+            if (typeof stat.jitter === "number" && stat.jitter >= 0) {
+              jitterSum += stat.jitter;
+              jitterCount++;
+            }
+
+            // RTT (Producer에서 RTCP SR/RR 기반)
+            if (typeof stat.roundTripTime === "number" && stat.roundTripTime > 0) {
+              rttSum += stat.roundTripTime;
+              rttCount++;
+            }
+
+            if (stat.byteCount > 0) activeProducers++;
+          }
+        }
+      } catch (e) {
+        // closed producer 무시
+      }
+    }
+
+    // Consumer 통계 (서버에서 나가는 RTP)
+    for (const consumer of consumers) {
+      if (consumer.closed) continue;
+      try {
+        const stats = await consumer.getStats();
+        for (const stat of stats) {
+          if (stat.type === "outbound-rtp") {
+            totalBytesSent += stat.byteCount || 0;
+            totalPacketsSent += stat.packetCount || 0;
+
+            // Consumer RTT
+            if (typeof stat.roundTripTime === "number" && stat.roundTripTime > 0) {
+              rttSum += stat.roundTripTime;
+              rttCount++;
+            }
+
+            if (stat.byteCount > 0) activeConsumers++;
+          }
+        }
+      } catch (e) {
+        // closed consumer 무시
+      }
+    }
+
+    // 비트레이트 계산 (이전 측정치와 비교)
+    let inboundBitrate = 0;
+    let outboundBitrate = 0;
+
+    if (this.previousRtpStats) {
+      const elapsedMs = now - this.previousRtpStats.timestamp;
+      if (elapsedMs > 0) {
+        const deltaReceived = totalBytesReceived - this.previousRtpStats.bytesReceived;
+        const deltaSent = totalBytesSent - this.previousRtpStats.bytesSent;
+
+        // bits per second
+        inboundBitrate = (deltaReceived * 8 * 1000) / elapsedMs;
+        outboundBitrate = (deltaSent * 8 * 1000) / elapsedMs;
+      }
+    }
+
+    // 평균 품질 지표 계산
+    const avgJitter = jitterCount > 0 ? Math.round((jitterSum / jitterCount) * 100) / 100 : 0;
+    const avgRtt = rttCount > 0 ? Math.round((rttSum / rttCount) * 100) / 100 : 0;
+
+    // Packet Loss Rate 계산 (%)
+    const totalPackets = totalPacketsReceived + totalPacketsLost;
+    const packetLossRate = totalPackets > 0
+      ? Math.round((totalPacketsLost / totalPackets) * 10000) / 100  // 소수점 2자리 %
+      : 0;
+
+    // 현재 값 저장
+    this.previousRtpStats = {
+      bytesReceived: totalBytesReceived,
+      bytesSent: totalBytesSent,
+      timestamp: now,
+    };
+
+    return {
+      // 기존 전송량 통계
+      totalBytesReceived,
+      totalBytesSent,
+      activeProducers,
+      activeConsumers,
+      inboundBitrate: Math.round(inboundBitrate),
+      outboundBitrate: Math.round(outboundBitrate),
+      // 품질 지표 (QoE)
+      totalPacketsReceived,
+      totalPacketsSent,
+      totalPacketsLost,
+      packetLossRate,      // % (0-100)
+      avgJitter,           // ms
+      avgRtt,              // ms
+    };
+  }
+
+  /**
    * CSV 파일에 기록
    * @private
    * @param {Object} metrics - 수집된 메트릭
@@ -295,7 +456,7 @@ class SFUMonitor {
   _recordToCsv(metrics) {
     if (!this.csvStream) return;
 
-    const { timestamp, elapsedMs, workerMetrics, nodeMemory, stats } = metrics;
+    const { timestamp, elapsedMs, workerMetrics, nodeMemory, stats, rtpStats } = metrics;
 
     const row = [
       timestamp,
@@ -311,6 +472,20 @@ class SFUMonitor {
       stats.transports,
       stats.producers,
       stats.consumers,
+      // RTP 전송량 통계
+      rtpStats.totalBytesReceived,
+      rtpStats.totalBytesSent,
+      rtpStats.inboundBitrate,
+      rtpStats.outboundBitrate,
+      rtpStats.activeProducers,
+      rtpStats.activeConsumers,
+      // 품질 지표 (QoE)
+      rtpStats.totalPacketsReceived,
+      rtpStats.totalPacketsSent,
+      rtpStats.totalPacketsLost,
+      rtpStats.packetLossRate,
+      rtpStats.avgJitter,
+      rtpStats.avgRtt,
       // Worker 상세 정보는 JSON 문자열로 저장 (CSV 이스케이프)
       `"${JSON.stringify(workerMetrics.workerDetails).replace(/"/g, '""')}"`,
     ].join(",");
@@ -324,57 +499,84 @@ class SFUMonitor {
    * @param {Object} metrics - 수집된 메트릭
    */
   _printToConsole(metrics) {
-    const { workerMetrics, nodeMemory, stats } = metrics;
+    const { workerMetrics, nodeMemory, stats, rtpStats } = metrics;
 
     // 경고 체크
     const warnings = [];
+
+    // CPU 경고 (80% 초과)
     if (workerMetrics.totalCpuPercent > 80) {
       warnings.push(`CPU ${workerMetrics.totalCpuPercent}% (경고: 80% 초과)`);
     }
+
+    // 메모리 경고 (3.5GB 초과)
     if (nodeMemory.rssMb > 3500) {
       warnings.push(`메모리 ${nodeMemory.rssMb}MB (경고: 3.5GB 초과)`);
     }
 
-    console.log("\n" + "━".repeat(60));
-    console.log(`[SFU Monitor] ${new Date().toLocaleTimeString("ko-KR")}`);
-    console.log("━".repeat(60));
+    // RTP 전송이 없는 경우 경고
+    if (stats.producers > 0 && rtpStats.activeProducers === 0) {
+      warnings.push("RTP 수신 없음 (Producer 존재하나 데이터 없음)");
+    }
+
+    // 품질 지표 경고 (QoE)
+    // Packet Loss > 1% 주의, > 5% 경고
+    if (rtpStats.packetLossRate > 5) {
+      warnings.push(`패킷 손실 ${rtpStats.packetLossRate}% (심각: 5% 초과)`);
+    } else if (rtpStats.packetLossRate > 1) {
+      warnings.push(`패킷 손실 ${rtpStats.packetLossRate}% (주의: 1% 초과)`);
+    }
+
+    // Jitter > 30ms 경고
+    if (rtpStats.avgJitter > 30) {
+      warnings.push(`Jitter ${rtpStats.avgJitter}ms (경고: 30ms 초과)`);
+    }
+
+    // RTT > 150ms 경고
+    if (rtpStats.avgRtt > 150) {
+      warnings.push(`RTT ${rtpStats.avgRtt}ms (경고: 150ms 초과)`);
+    }
+
+    const separator = "━".repeat(60);
+    const header = `[SFU Monitor] ${new Date().toLocaleTimeString("ko-KR")}`;
 
     // Worker 메트릭
-    console.log(
-      `📊 Worker: ${workerMetrics.workerCount}개 | ` +
-        `CPU: ${workerMetrics.totalCpuPercent}% | ` +
-        `메모리: ${workerMetrics.totalMemoryMb}MB`
-    );
+    const workerLine = `📊 Worker: ${workerMetrics.workerCount}개 | CPU: ${workerMetrics.totalCpuPercent}% | 메모리: ${workerMetrics.totalMemoryMb}MB`;
 
     // Node.js 메모리
-    console.log(
-      `📦 Node.js: Heap ${nodeMemory.heapUsedMb}/${nodeMemory.heapTotalMb}MB | ` +
-        `RSS ${nodeMemory.rssMb}MB`
-    );
+    const nodeLine = `📦 Node.js: Heap ${nodeMemory.heapUsedMb}/${nodeMemory.heapTotalMb}MB | RSS ${nodeMemory.rssMb}MB`;
 
     // SFU 리소스
-    console.log(
-      `🔗 리소스: Router ${stats.routers} | ` +
-        `Transport ${stats.transports} | ` +
-        `Producer ${stats.producers} | ` +
-        `Consumer ${stats.consumers}`
-    );
+    const resourceLine = `🔗 리소스: Router ${stats.routers} | Transport ${stats.transports} | Producer ${stats.producers} | Consumer ${stats.consumers}`;
+
+    // RTP 전송량 통계
+    const inMbps = (rtpStats.inboundBitrate / 1000000).toFixed(2);
+    const outMbps = (rtpStats.outboundBitrate / 1000000).toFixed(2);
+    const rtpLine = `📡 RTP: 수신 ${inMbps} Mbps | 송신 ${outMbps} Mbps | 활성 Producer ${rtpStats.activeProducers}/${stats.producers} | Consumer ${rtpStats.activeConsumers}/${stats.consumers}`;
+
+    // 품질 지표 (QoE)
+    const qoeLine = `📈 QoE: 패킷손실 ${rtpStats.packetLossRate}% | Jitter ${rtpStats.avgJitter}ms | RTT ${rtpStats.avgRtt}ms`;
 
     // Worker별 상세 정보
+    let workerDetailLines = "";
     if (workerMetrics.workerDetails.length > 0) {
-      console.log("┌─ Worker 상세");
+      workerDetailLines = "\n┌─ Worker 상세";
       for (const worker of workerMetrics.workerDetails) {
-        console.log(
-          `│  PID ${worker.pid}: CPU ${worker.cpuPercent}% | 메모리 ${worker.memoryMb}MB`
-        );
+        workerDetailLines += `\n│  PID ${worker.pid}: CPU ${worker.cpuPercent}% | 메모리 ${worker.memoryMb}MB`;
       }
-      console.log("└─");
+      workerDetailLines += "\n└─";
     }
 
     // 경고 출력
+    let warningLine = "";
     if (warnings.length > 0) {
-      console.log("⚠️  경고: " + warnings.join(", "));
+      warningLine = `\n⚠️  경고: ${warnings.join(", ")}`;
     }
+
+    // 전체 메시지 조합
+    const fullMessage = `\n${separator}\n${header}\n${separator}\n${workerLine}\n${nodeLine}\n${resourceLine}\n${rtpLine}\n${qoeLine}${workerDetailLines}${warningLine}`;
+
+    serverLogger.info("SFUMonitor", fullMessage);
   }
 
   /**

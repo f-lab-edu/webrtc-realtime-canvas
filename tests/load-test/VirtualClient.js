@@ -349,46 +349,77 @@ class VirtualClient {
   async _waitForWebRTCConnection() {
     this.logger.info(this.prefix, "WebRTC 연결 대기 시작");
 
-    // 브라우저 컨텍스트에서 RTCPeerConnection 상태 확인
-    const maxWait = 10000; // 최대 10초 대기
+    const maxWait = 15000; // 최대 15초 대기
     const interval = 500;
     let elapsed = 0;
 
     while (elapsed < maxWait) {
       const connectionInfo = await this.page.evaluate(() => {
-        // RTCPeerConnection 인스턴스 찾기
-        // 참고: mediasoup-client는 window.__rtcPeerConnections를 사용하지 않음
-        // 실제 SFU 연결은 서버 측 리소스(Router, Transport, Producer)로 확인
-        const pcs = window.__rtcPeerConnections || [];
-        if (pcs.length === 0) {
-          return { state: "waiting-for-peers", count: 0 };
+        // SFU 연결 상태 확인 (mediasoup-client용)
+        const sfuConnectionState = window.__sfuConnectionState;
+        const sfuState = window.__sfuState;
+
+        // SFU 상태가 있으면 우선 확인
+        if (sfuState && sfuConnectionState) {
+          const sendConnected = sfuConnectionState.send === "connected";
+          const recvConnected = sfuConnectionState.recv === "connected";
+          const isReady = sfuState === "ready";
+
+          // Send Transport가 connected 상태면 미디어 전송 가능
+          if (sendConnected) {
+            return {
+              state: "connected",
+              type: "sfu",
+              sfuState,
+              sendState: sfuConnectionState.send,
+              recvState: sfuConnectionState.recv,
+            };
+          }
+
+          // SFU가 ready 상태면 Transport 연결 진행 중
+          if (isReady) {
+            return {
+              state: "connecting",
+              type: "sfu",
+              sfuState,
+              sendState: sfuConnectionState.send,
+              recvState: sfuConnectionState.recv,
+            };
+          }
+
+          return {
+            state: sfuState, // 'idle', 'initializing', 'error'
+            type: "sfu",
+            sfuState,
+            sendState: sfuConnectionState.send,
+            recvState: sfuConnectionState.recv,
+          };
         }
 
-        // 모든 연결 상태 확인
+        // 폴백: 기존 RTCPeerConnection 확인 (P2P 또는 다른 WebRTC 구현용)
+        const pcs = window.__rtcPeerConnections || [];
+        if (pcs.length === 0) {
+          return { state: "waiting-for-sfu", type: "unknown" };
+        }
+
         const states = pcs.map((pc) => ({
           connectionState: pc.connectionState,
           iceConnectionState: pc.iceConnectionState,
-          signalingState: pc.signalingState,
         }));
 
         const anyConnected = states.some((s) => s.connectionState === "connected");
-        const anyConnecting = states.some((s) => s.connectionState === "connecting");
-
         return {
-          state: anyConnected
-            ? "connected"
-            : anyConnecting
-              ? "connecting"
-              : states[0]?.connectionState || "unknown",
+          state: anyConnected ? "connected" : "connecting",
+          type: "p2p",
           count: pcs.length,
-          details: states,
         };
       });
 
+      // 연결 완료
       if (connectionInfo.state === "connected") {
         this.logger.info(
           this.prefix,
-          `WebRTC 연결 완료 (PeerConnection ${connectionInfo.count}개)`
+          `WebRTC 연결 완료 (${connectionInfo.type}): send=${connectionInfo.sendState}, recv=${connectionInfo.recvState}`
         );
         return;
       }
@@ -397,8 +428,8 @@ class VirtualClient {
       if (elapsed % 2000 === 0 && elapsed > 0) {
         this.logger.debug(
           this.prefix,
-          `WebRTC 상태: ${connectionInfo.state}`,
-          connectionInfo.details
+          `WebRTC 상태: ${connectionInfo.state} (${connectionInfo.type})`,
+          connectionInfo.sfuState ? `sfuState=${connectionInfo.sfuState}` : ""
         );
       }
 
@@ -406,9 +437,15 @@ class VirtualClient {
       elapsed += interval;
     }
 
-    // 다른 사용자가 없으면 P2P 연결이 없으므로 정상 상태
-    // SFU 연결은 서버 측 리소스(Router, Transport, Producer)로 확인
-    this.logger.info(this.prefix, "SFU 연결 완료 (다른 참가자 대기 중)");
+    // 타임아웃 - 상태 출력
+    const finalState = await this.page.evaluate(() => ({
+      sfuState: window.__sfuState,
+      sfuConnectionState: window.__sfuConnectionState,
+    }));
+    this.logger.warn(
+      this.prefix,
+      `WebRTC 연결 타임아웃: sfuState=${finalState.sfuState}, connectionState=${JSON.stringify(finalState.sfuConnectionState)}`
+    );
   }
 
   /**

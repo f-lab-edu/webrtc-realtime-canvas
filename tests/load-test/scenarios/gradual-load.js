@@ -7,6 +7,8 @@
  * @see REQ-014: 점진적 부하 증가
  */
 
+import { getLogger } from "../utils/logger.js";
+
 /**
  * 점진적 부하 테스트 시나리오 설정
  */
@@ -37,14 +39,17 @@ export const scenario = {
  * @returns {Promise<Object>} 테스트 리포트
  */
 export async function run(runner, options = {}) {
+  const logger = getLogger();
+  const prefix = "Scenario:GradualLoad";
+
   // 설정 오버라이드
   const config = { ...scenario.config, ...options };
 
-  console.log(`\n[시나리오: ${scenario.name}]`);
-  console.log(`설명: ${scenario.description}`);
-  console.log(`목표 사용자: ${config.targetUsers}명`);
-  console.log(`추가 간격: ${config.intervalSeconds}초`);
-  console.log(`테스트 시간: ${config.durationMinutes}분`);
+  logger.info(prefix, `[시나리오: ${scenario.name}]`);
+  logger.info(prefix, `설명: ${scenario.description}`);
+  logger.info(prefix, `목표 사용자: ${config.targetUsers}명`);
+  logger.info(prefix, `추가 간격: ${config.intervalSeconds}초`);
+  logger.info(prefix, `테스트 시간: ${config.durationMinutes}분`);
 
   // 러너 설정 업데이트
   runner.targetUsers = config.targetUsers;
@@ -58,11 +63,11 @@ export async function run(runner, options = {}) {
   const evaluation = evaluateResults(report, scenario.successCriteria);
   report.evaluation = evaluation;
 
-  console.log("\n[시나리오 평가]");
-  console.log(`성공 여부: ${evaluation.passed ? "PASS" : "FAIL"}`);
+  logger.info(prefix, "[시나리오 평가]");
+  logger.info(prefix, `성공 여부: ${evaluation.passed ? "PASS" : "FAIL"}`);
   for (const criterion of evaluation.criteria) {
     const status = criterion.passed ? "✓" : "✗";
-    console.log(`  ${status} ${criterion.name}: ${criterion.actual} (기준: ${criterion.expected})`);
+    logger.info(prefix, `  ${status} ${criterion.name}: ${criterion.actual} (기준: ${criterion.expected})`);
   }
 
   return report;

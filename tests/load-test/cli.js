@@ -221,7 +221,7 @@ async function runMultiRoomTest(options) {
   const prefix = "CLI:MultiRoom";
 
   logger.info(prefix, "═".repeat(60));
-  logger.info(prefix, "  WebRTC SFU 다중 방 부하 테스트 도구 v" + VERSION);
+  logger.info(prefix, `  WebRTC SFU 다중 방 부하 테스트 도구 v${VERSION}`);
   logger.info(prefix, "═".repeat(60));
 
   // 비디오 파일 검증 (public/video/ 폴더에서 확인)

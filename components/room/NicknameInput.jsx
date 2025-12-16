@@ -137,7 +137,7 @@ export default function NicknameInput({ onNicknameSet, roomId }) {
               type="text"
               value={nickname}
               onChange={handleNicknameChange}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="닉네임을 입력하세요 (1-20자)"
               disabled={isSubmitting}
               className={`

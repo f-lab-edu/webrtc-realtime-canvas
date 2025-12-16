@@ -182,6 +182,14 @@ class ConsumerManager {
   }
 
   /**
+   * 모든 Consumer 인스턴스 반환 (모니터링용)
+   * @returns {Object[]} Consumer 인스턴스 배열
+   */
+  getAll() {
+    return Array.from(this.consumers.values());
+  }
+
+  /**
    * 리소스 정리
    */
   cleanup() {
