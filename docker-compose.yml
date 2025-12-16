@@ -47,7 +47,7 @@ services:
       # 예: MEDIASOUP_ANNOUNCED_IP=xxx.t.pinggy.online
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
       # mediasoup Worker 수 (Docker CPU 제한에 맞춤)
-      - MEDIASOUP_NUM_WORKERS=2
+      - MEDIASOUP_NUM_WORKERS=1
       # ============================================
       # WebRtcServer 설정 (단일 포트 다중화)
       # ============================================
