@@ -168,14 +168,14 @@ export const webRtcServerOptions = {
     {
       protocol: "udp",
       ip: process.env.MEDIASOUP_WEBRTC_SERVER_LISTEN_IP || "0.0.0.0",
-      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "44444", 10),
-      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:44444",
+      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "10000", 10),
+      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:10000",
     },
     {
       protocol: "tcp",
       ip: process.env.MEDIASOUP_WEBRTC_SERVER_LISTEN_IP || "0.0.0.0",
-      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "44444", 10),
-      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:44444",
+      port: Number.parseInt(process.env.MEDIASOUP_WEBRTC_SERVER_PORT || "10000", 10),
+      announcedAddress: process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1:10000",
     },
   ],
 };
