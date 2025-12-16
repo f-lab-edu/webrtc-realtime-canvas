@@ -157,12 +157,8 @@ class MediasoupManager {
    * @returns {Promise<Object>}
    */
   async createWebRtcTransport(router, socketId, roomId = null) {
-    // WebRtcServer 획득
-    let webRtcServer = null;
-    if (roomId) {
-      const worker = this.routerManager.getWorkerForRoom(roomId);
-      webRtcServer = worker ? this.workerPoolManager.getWebRtcServer(worker) : null;
-    }
+    // WebRtcServer 획득 (단일 포트 모드에서는 하나만 존재)
+    const webRtcServer = this.workerPoolManager.getWebRtcServer();
 
     return this.transportManager.createWebRtcTransport(router, socketId, webRtcServer);
   }

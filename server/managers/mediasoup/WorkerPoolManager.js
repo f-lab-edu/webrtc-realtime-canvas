@@ -69,8 +69,9 @@ class WorkerPoolManager {
   async _createWorker(index) {
     const worker = await mediasoup.createWorker(workerSettings);
 
-    // WebRtcServer 생성 (활성화된 경우)
-    if (webRtcServerEnabled) {
+    // WebRtcServer 생성 (활성화된 경우, 첫 번째 Worker에만)
+    // 단일 포트를 사용하므로 하나의 WebRtcServer만 필요
+    if (webRtcServerEnabled && index === 0) {
       try {
         const webRtcServer = await worker.createWebRtcServer(webRtcServerOptions);
         this.webRtcServers.set(worker.pid, webRtcServer);
@@ -146,13 +147,14 @@ class WorkerPoolManager {
   }
 
   /**
-   * Worker에 연결된 WebRtcServer 반환
-   * @param {mediasoup.types.Worker} worker
+   * WebRtcServer 반환
+   * 단일 포트 모드에서는 첫 번째 Worker의 WebRtcServer를 공유
    * @returns {mediasoup.types.WebRtcServer|null}
    */
-  getWebRtcServer(worker) {
-    if (!worker) return null;
-    return this.webRtcServers.get(worker.pid) || null;
+  getWebRtcServer() {
+    // WebRtcServer는 하나만 존재 (첫 번째 Worker에 생성됨)
+    const firstServer = this.webRtcServers.values().next().value;
+    return firstServer || null;
   }
 
   /**
