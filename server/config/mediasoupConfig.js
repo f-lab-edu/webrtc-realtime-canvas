@@ -155,8 +155,7 @@ export const iceRetryConfig = {
  * - true: 단일 포트로 모든 Transport 다중화 (Pinggy 터널링에 적합)
  * - false: 기존 방식 (각 Transport별 개별 포트)
  */
-export const webRtcServerEnabled =
-  process.env.MEDIASOUP_WEBRTC_SERVER_ENABLED === "true";
+export const webRtcServerEnabled = process.env.MEDIASOUP_WEBRTC_SERVER_ENABLED === "true";
 
 /**
  * WebRtcServer 설정

@@ -28,9 +28,10 @@ class TransportManager {
    * WebRTC Transport 생성
    * @param {Object} router Router 인스턴스
    * @param {string} socketId 소켓 ID
+   * @param {Object|null} webRtcServer WebRtcServer 인스턴스 (선택)
    * @returns {Promise<Object>} Transport 인스턴스
    */
-  async createWebRtcTransport(router, socketId) {
+  async createWebRtcTransport(router, socketId, webRtcServer = null) {
     if (!router) {
       throw new Error("[TransportManager] router는 필수입니다.");
     }
@@ -38,10 +39,21 @@ class TransportManager {
       throw new Error("[TransportManager] socketId는 필수입니다.");
     }
 
-    const transport = await router.createWebRtcTransport({
-      ...webRtcTransportOptions,
-      appData: { socketId },
-    });
+    // WebRtcServer 사용 여부에 따른 분기
+    const transportOptions = webRtcServer
+      ? {
+          webRtcServer: webRtcServer,
+          enableUdp: true,
+          enableTcp: true,
+          preferUdp: true,
+          appData: { socketId },
+        }
+      : {
+          ...webRtcTransportOptions,
+          appData: { socketId },
+        };
+
+    const transport = await router.createWebRtcTransport(transportOptions);
 
     // Transport 저장
     this.transports.set(transport.id, transport);

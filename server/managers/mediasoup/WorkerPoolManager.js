@@ -14,12 +14,20 @@
  */
 
 import * as mediasoup from "mediasoup";
-import { numWorkers, workerSettings } from "../../config/mediasoupConfig.js";
+import {
+  numWorkers,
+  workerSettings,
+  webRtcServerEnabled,
+  webRtcServerOptions,
+} from "../../config/mediasoupConfig.js";
 
 class WorkerPoolManager {
   constructor() {
     /** @type {mediasoup.types.Worker[]} Worker 풀 */
     this.workers = [];
+
+    /** @type {Map<number, mediasoup.types.WebRtcServer>} worker.pid → WebRtcServer */
+    this.webRtcServers = new Map();
 
     /** @type {number} 라운드 로빈 인덱스 */
     this.nextWorkerIndex = 0;
@@ -61,8 +69,25 @@ class WorkerPoolManager {
   async _createWorker(index) {
     const worker = await mediasoup.createWorker(workerSettings);
 
+    // WebRtcServer 생성 (활성화된 경우)
+    if (webRtcServerEnabled) {
+      try {
+        const webRtcServer = await worker.createWebRtcServer(webRtcServerOptions);
+        this.webRtcServers.set(worker.pid, webRtcServer);
+        console.log(
+          `[WorkerPoolManager] WebRtcServer 생성: Worker ${index}, port=${webRtcServerOptions.listenInfos[0].port}`
+        );
+      } catch (error) {
+        console.error(`[WorkerPoolManager] WebRtcServer 생성 실패: Worker ${index}`, error);
+        throw error;
+      }
+    }
+
     worker.on("died", (error) => {
       console.error(`[WorkerPoolManager] Worker ${index} (PID: ${worker.pid}) 사망:`, error);
+
+      // WebRtcServer 정리
+      this.webRtcServers.delete(worker.pid);
 
       // Worker 풀에서 제거
       const workerIdx = this.workers.indexOf(worker);
@@ -121,11 +146,32 @@ class WorkerPoolManager {
   }
 
   /**
+   * Worker에 연결된 WebRtcServer 반환
+   * @param {mediasoup.types.Worker} worker
+   * @returns {mediasoup.types.WebRtcServer|null}
+   */
+  getWebRtcServer(worker) {
+    if (!worker) return null;
+    return this.webRtcServers.get(worker.pid) || null;
+  }
+
+  /**
    * 리소스 정리 - 모든 Worker 종료
    */
   cleanup() {
     console.log("[WorkerPoolManager] 리소스 정리");
 
+    // WebRtcServer 정리
+    for (const webRtcServer of this.webRtcServers.values()) {
+      try {
+        webRtcServer.close();
+      } catch (e) {
+        console.warn("[WorkerPoolManager] WebRtcServer 정리 에러:", e);
+      }
+    }
+    this.webRtcServers.clear();
+
+    // Worker 정리
     for (const worker of this.workers) {
       if (!worker.closed) {
         worker.close();
