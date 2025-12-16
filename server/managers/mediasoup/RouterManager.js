@@ -51,6 +51,9 @@ class RouterManager {
     const worker = this.workerPoolManager.getNextWorker();
     const router = await worker.createRouter(routerOptions);
 
+    // Worker 참조 저장 (WebRtcServer 조회용)
+    router.appData = { roomId, worker };
+
     this.roomRouters.set(roomId, router);
     console.log(`[RouterManager] Router 생성: roomId=${roomId}`);
 
@@ -64,6 +67,17 @@ class RouterManager {
    */
   getRouter(roomId) {
     return this.roomRouters.get(roomId);
+  }
+
+  /**
+   * Room에 할당된 Worker 반환
+   * @param {string} roomId
+   * @returns {mediasoup.types.Worker|null}
+   */
+  getWorkerForRoom(roomId) {
+    const router = this.roomRouters.get(roomId);
+    if (!router) return null;
+    return router.appData?.worker || null;
   }
 
   /**

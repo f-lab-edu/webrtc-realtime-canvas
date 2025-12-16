@@ -153,10 +153,18 @@ class MediasoupManager {
    * WebRTC Transport 생성
    * @param {Object} router Router 인스턴스
    * @param {string} socketId 소켓 ID
+   * @param {string} roomId 방 ID (WebRtcServer 조회용)
    * @returns {Promise<Object>}
    */
-  async createWebRtcTransport(router, socketId) {
-    return this.transportManager.createWebRtcTransport(router, socketId);
+  async createWebRtcTransport(router, socketId, roomId = null) {
+    // WebRtcServer 획득
+    let webRtcServer = null;
+    if (roomId) {
+      const worker = this.routerManager.getWorkerForRoom(roomId);
+      webRtcServer = worker ? this.workerPoolManager.getWebRtcServer(worker) : null;
+    }
+
+    return this.transportManager.createWebRtcTransport(router, socketId, webRtcServer);
   }
 
   /**

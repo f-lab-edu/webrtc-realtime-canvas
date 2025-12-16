@@ -70,7 +70,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         });
       }
 
-      const transport = await mediasoupManager.createWebRtcTransport(router, socket.id);
+      const transport = await mediasoupManager.createWebRtcTransport(router, socket.id, roomId);
 
       console.log(`[sfu:create-send-transport] roomId=${roomId}, transportId=${transport.id}`);
 
@@ -105,7 +105,7 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
         });
       }
 
-      const transport = await mediasoupManager.createWebRtcTransport(router, socket.id);
+      const transport = await mediasoupManager.createWebRtcTransport(router, socket.id, roomId);
 
       console.log(`[sfu:create-recv-transport] roomId=${roomId}, transportId=${transport.id}`);
 
