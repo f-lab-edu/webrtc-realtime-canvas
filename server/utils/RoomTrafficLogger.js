@@ -56,16 +56,23 @@ class RoomTrafficLogger {
   }
 
   /**
+   * 한국 시간(Asia/Seoul) Date 객체 생성
+   * @returns {Date} 한국 시간 기준 Date 객체
+   * @private
+   */
+  _getKoreaDate() {
+    // Intl API를 사용하여 시간대 안전하게 처리
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  }
+
+  /**
    * 한국 시간(Asia/Seoul) ISO 형식 타임스탬프 생성
    * @returns {string} ISO 형식 타임스탬프 (예: 2025-12-17T10:49:54+09:00)
    * @private
    */
   _getKoreanTimestamp() {
-    const now = new Date();
-    // UTC 시간에 9시간 추가하여 한국 시간 계산
-    const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    const isoString = koreaTime.toISOString().replace("Z", "+09:00");
-    return isoString;
+    const koreaDate = this._getKoreaDate();
+    return koreaDate.toISOString().replace("Z", "+09:00");
   }
 
   /**
@@ -74,10 +81,8 @@ class RoomTrafficLogger {
    * @private
    */
   _getKoreanDateString() {
-    const now = new Date();
-    // UTC 시간에 9시간 추가하여 한국 시간 계산
-    const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    return koreaTime.toISOString().split("T")[0];
+    const koreaDate = this._getKoreaDate();
+    return koreaDate.toISOString().split("T")[0];
   }
 
   /**
@@ -322,11 +327,8 @@ class RoomTrafficLogger {
             });
 
             if (typeof stat.jitter === "number" && stat.jitter >= 0) {
-              // RTP timestamp 단위를 ms로 변환 (미디어 종류별 클럭 레이트)
-              // 비디오: 90kHz, 오디오(Opus): 48kHz
-              const clockRate = producer.kind === "audio" ? 48 : 90;
-              const jitterMs = stat.jitter / clockRate;
-              session.jitterSum += jitterMs;
+              // mediasoup은 jitter를 이미 ms 단위로 제공
+              session.jitterSum += stat.jitter;
               session.jitterCount++;
             }
             if (typeof stat.roundTripTime === "number" && stat.roundTripTime > 0) {
