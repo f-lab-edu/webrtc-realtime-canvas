@@ -122,6 +122,9 @@ class RoomTrafficLogger {
       packetsLost: 0,
       // CPU 사용률 계산용
       previousResourceUsage: new Map(),
+      // 델타 계산용 이전 Producer/Consumer 통계
+      previousProducerStats: new Map(),
+      previousConsumerStats: new Map(),
     };
 
     this.sessions.set(roomId, session);
@@ -286,7 +289,7 @@ class RoomTrafficLogger {
     session.maxCpuPercent = Math.max(session.maxCpuPercent, cpuMemMetrics.totalCpuPercent);
     session.maxMemoryMb = Math.max(session.maxMemoryMb, cpuMemMetrics.totalMemoryMb);
 
-    // Producer 통계 수집
+    // Producer 통계 수집 (델타 기반)
     const producers = this.manager.producerManager.getAll();
     for (const producer of producers) {
       if (producer.closed) continue;
@@ -294,13 +297,35 @@ class RoomTrafficLogger {
         const producerStats = await producer.getStats();
         for (const stat of producerStats) {
           if (stat.type === "inbound-rtp") {
-            session.totalBytesReceived += stat.byteCount || 0;
-            session.packetsReceived += stat.packetCount || 0;
-            session.packetsLost += stat.packetsLost || 0;
+            const producerId = producer.id;
+            const prevStats = session.previousProducerStats.get(producerId) || {
+              byteCount: 0,
+              packetCount: 0,
+              packetsLost: 0,
+            };
+
+            // 델타 계산 (현재값 - 이전값)
+            const deltaBytes = (stat.byteCount || 0) - prevStats.byteCount;
+            const deltaPackets = (stat.packetCount || 0) - prevStats.packetCount;
+            const deltaLost = (stat.packetsLost || 0) - prevStats.packetsLost;
+
+            // 양수인 경우에만 누적 (리셋 방지)
+            if (deltaBytes > 0) session.totalBytesReceived += deltaBytes;
+            if (deltaPackets > 0) session.packetsReceived += deltaPackets;
+            if (deltaLost > 0) session.packetsLost += deltaLost;
+
+            // 이전 값 저장
+            session.previousProducerStats.set(producerId, {
+              byteCount: stat.byteCount || 0,
+              packetCount: stat.packetCount || 0,
+              packetsLost: stat.packetsLost || 0,
+            });
 
             if (typeof stat.jitter === "number" && stat.jitter >= 0) {
-              // RTP timestamp 단위를 ms로 변환 (비디오: 90kHz 클럭)
-              const jitterMs = stat.jitter / 90;
+              // RTP timestamp 단위를 ms로 변환 (미디어 종류별 클럭 레이트)
+              // 비디오: 90kHz, 오디오(Opus): 48kHz
+              const clockRate = producer.kind === "audio" ? 48 : 90;
+              const jitterMs = stat.jitter / clockRate;
               session.jitterSum += jitterMs;
               session.jitterCount++;
             }
@@ -315,7 +340,7 @@ class RoomTrafficLogger {
       }
     }
 
-    // Consumer 통계 수집
+    // Consumer 통계 수집 (델타 기반)
     const consumers = this.manager.consumerManager.getAll();
     for (const consumer of consumers) {
       if (consumer.closed) continue;
@@ -323,7 +348,21 @@ class RoomTrafficLogger {
         const consumerStats = await consumer.getStats();
         for (const stat of consumerStats) {
           if (stat.type === "outbound-rtp") {
-            session.totalBytesSent += stat.byteCount || 0;
+            const consumerId = consumer.id;
+            const prevStats = session.previousConsumerStats.get(consumerId) || {
+              byteCount: 0,
+            };
+
+            // 델타 계산 (현재값 - 이전값)
+            const deltaBytes = (stat.byteCount || 0) - prevStats.byteCount;
+
+            // 양수인 경우에만 누적 (리셋 방지)
+            if (deltaBytes > 0) session.totalBytesSent += deltaBytes;
+
+            // 이전 값 저장
+            session.previousConsumerStats.set(consumerId, {
+              byteCount: stat.byteCount || 0,
+            });
 
             if (typeof stat.roundTripTime === "number" && stat.roundTripTime > 0) {
               session.rttSum += stat.roundTripTime;
@@ -387,9 +426,7 @@ class RoomTrafficLogger {
 
     // 품질 지표 계산
     const avgJitterMs =
-      session.jitterCount > 0
-        ? (session.jitterSum / session.jitterCount).toFixed(2)
-        : "0.00";
+      session.jitterCount > 0 ? (session.jitterSum / session.jitterCount).toFixed(2) : "0.00";
     const avgRtt = session.rttCount > 0 ? (session.rttSum / session.rttCount).toFixed(2) : "0.00";
     const totalPackets = session.packetsReceived + session.packetsLost;
     const packetLossRate =
