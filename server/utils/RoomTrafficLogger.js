@@ -384,8 +384,11 @@ class RoomTrafficLogger {
         : "0.00";
 
     // 품질 지표 계산
-    const avgJitter =
-      session.jitterCount > 0 ? (session.jitterSum / session.jitterCount).toFixed(2) : "0.00";
+    // mediasoup jitter는 초 단위로 반환되므로 ms로 변환 (* 1000)
+    const avgJitterMs =
+      session.jitterCount > 0
+        ? ((session.jitterSum / session.jitterCount) * 1000).toFixed(2)
+        : "0.00";
     const avgRtt = session.rttCount > 0 ? (session.rttSum / session.rttCount).toFixed(2) : "0.00";
     const totalPackets = session.packetsReceived + session.packetsLost;
     const packetLossRate =
@@ -409,7 +412,7 @@ class RoomTrafficLogger {
 - 총 송신: ${totalSentMB} MB (평균 ${avgOutboundMbps} Mbps)
 [품질 지표]
 - 패킷 손실률: ${packetLossRate}%
-- 평균 Jitter: ${avgJitter}ms
+- 평균 Jitter: ${avgJitterMs}ms
 - 평균 RTT: ${avgRtt}ms
 ---
 
