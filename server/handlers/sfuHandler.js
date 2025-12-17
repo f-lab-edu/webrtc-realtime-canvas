@@ -498,8 +498,11 @@ export const registerSfuHandlers = (
   /**
    * disconnect 이벤트 시 SFU 리소스 정리
    * roomHandler의 disconnect와 별도로 SFU 리소스만 정리
+   *
+   * prependListener 사용: roomHandler보다 먼저 실행되어야
+   * roomId 조회 및 세션 종료가 정상 동작함
    */
-  socket.on("disconnect", () => {
+  socket.prependListener("disconnect", () => {
     // 세션 종료 검사 (리소스 정리 전에 roomId 조회)
     const roomId = roomManager.getRoomIdBySocketId(socket.id);
 
