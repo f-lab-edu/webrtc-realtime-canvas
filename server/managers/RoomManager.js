@@ -1,12 +1,12 @@
 /**
  * RoomManager 클래스
  * 방 생성, 조회, 참가자 관리를 담당하는 클래스
- * P2P Mesh 다중 참가자 지원 (최대 6명)
+ * SFU 다중 참가자 지원 (최대 20명)
  */
 import { roomIdSchema, socketIdSchema } from "../schemas/socketSchemas.js";
 
 class RoomManager {
-  constructor(defaultMaxParticipants = 6) {
+  constructor(defaultMaxParticipants = 20) {
     // 메모리 기반 방 관리 (Map 사용)
     this.rooms = new Map(); // roomId → { participants: Set, maxParticipants, hostSocketId, ... }
     this.socketToRoom = new Map(); // socketId → roomId (빠른 조회를 위한 역방향 맵)

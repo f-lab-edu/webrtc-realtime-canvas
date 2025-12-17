@@ -8,7 +8,7 @@ import { registerSfuHandlers } from "./handlers/sfuHandler.js";
 import registerSocketHandlers from "./handlers/socketHandler.js";
 import MediasoupManager from "./managers/MediasoupManager.js";
 import RoomManager from "./managers/RoomManager.js";
-import SFUMonitor from "./utils/SFUMonitor.js";
+import RoomTrafficLogger from "./utils/RoomTrafficLogger.js";
 
 dotenv.config();
 
@@ -38,8 +38,8 @@ const roomManager = new RoomManager();
 // MediasoupManager 싱글톤 인스턴스
 const mediasoupManager = MediasoupManager.getInstance();
 
-// SFUMonitor 인스턴스 (환경변수로 활성화)
-let sfuMonitor = null;
+// RoomTrafficLogger 인스턴스 (트래픽 기반 로깅)
+let roomTrafficLogger = null;
 
 // 헬스 체크 엔드포인트
 app.get("/health", (_req, res) => {
@@ -58,15 +58,11 @@ app.get("/sfu/stats", (_req, res) => {
 // SFU 메트릭 엔드포인트 (부하 테스트용)
 app.get("/sfu/metrics", async (_req, res) => {
   try {
-    // 일회성 스냅샷 수집용 모니터 인스턴스
-    const tempMonitor = new SFUMonitor(mediasoupManager, { consoleOutput: false });
-    const snapshot = await tempMonitor.getSnapshot();
-
+    const stats = mediasoupManager.getStats();
     res.json({
       status: "ok",
-      metrics: snapshot,
-      monitoring: sfuMonitor?.isMonitoring() || false,
-      csvFilepath: sfuMonitor?.getCsvFilepath() || null,
+      stats,
+      activeSessions: roomTrafficLogger ? roomTrafficLogger.sessions.size : 0,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -91,7 +87,7 @@ io.on("connection", (socket) => {
   registerChatHandlers(io, socket, roomManager);
 
   // SFU 이벤트 핸들러 등록
-  registerSfuHandlers(io, socket, roomManager, mediasoupManager);
+  registerSfuHandlers(io, socket, roomManager, mediasoupManager, roomTrafficLogger);
 });
 
 // 서버 시작
@@ -103,16 +99,12 @@ const startServer = async () => {
     // mediasoup Worker 풀 초기화
     await mediasoupManager.initialize();
 
-    // 모니터링 활성화 (환경변수로 제어)
-    if (process.env.ENABLE_MONITORING === "true") {
-      sfuMonitor = new SFUMonitor(mediasoupManager, {
-        intervalMs: Number(process.env.METRICS_INTERVAL_MS) || 1000,
-        outputDir: process.env.METRICS_OUTPUT_DIR || "./metrics",
-        consoleOutput: process.env.METRICS_CONSOLE_OUTPUT !== "false",
-      });
-      await sfuMonitor.start();
-      console.log(`SFU 모니터링 활성화: 간격 ${process.env.METRICS_INTERVAL_MS || 1000}ms`);
-    }
+    // RoomTrafficLogger 초기화 (트래픽 기반 로깅)
+    roomTrafficLogger = new RoomTrafficLogger(mediasoupManager, roomManager, {
+      logDir: process.env.TRAFFIC_LOG_DIR || "./logs/traffic",
+      intervalMs: Number(process.env.METRICS_INTERVAL_MS) || 1000,
+    });
+    console.log("트래픽 로깅 활성화: 세션 기반 로깅");
 
     httpServer.listen(PORT, () => {
       console.log(`Signaling server running on port ${PORT}`);
@@ -146,7 +138,7 @@ process.on("unhandledRejection", (reason, promise) => {
 // 정상 종료 시 리소스 정리
 process.on("SIGTERM", () => {
   console.log("SIGTERM 신호 수신, 서버 종료 중...");
-  if (sfuMonitor) sfuMonitor.stop();
+  if (roomTrafficLogger) roomTrafficLogger.cleanup();
   mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {
@@ -157,7 +149,7 @@ process.on("SIGTERM", () => {
 
 process.on("SIGINT", () => {
   console.log("SIGINT 신호 수신, 서버 종료 중...");
-  if (sfuMonitor) sfuMonitor.stop();
+  if (roomTrafficLogger) roomTrafficLogger.cleanup();
   mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {

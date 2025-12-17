@@ -5,7 +5,7 @@ import VideoPlayer from "./VideoPlayer";
 
 /**
  * VideoGrid 컴포넌트
- * P2P Mesh: 다중 참가자 비디오를 그리드 레이아웃으로 배치
+ * SFU: 다중 참가자 비디오를 그리드 레이아웃으로 배치 (최대 20명)
  *
  * @param {Object} props
  * @param {MediaStream} props.localStream - 로컬 미디어 스트림
@@ -30,7 +30,7 @@ export default function VideoGrid({
   const remoteCount = streamArray.length;
 
   /**
-   * 참가자 수에 따른 그리드 클래스 결정
+   * 참가자 수에 따른 그리드 클래스 결정 (최대 20명)
    * @param {number} count - 참가자 수 (로컬 포함)
    * @returns {string} CSS 클래스명
    */
@@ -39,7 +39,10 @@ export default function VideoGrid({
     if (count <= 2) return styles["grid-2"];
     if (count <= 4) return styles["grid-4"];
     if (count <= 6) return styles["grid-6"];
-    return styles["grid-9"];
+    if (count <= 9) return styles["grid-9"];
+    if (count <= 12) return styles["grid-12"];
+    if (count <= 16) return styles["grid-16"];
+    return styles["grid-20"];
   };
 
   // 전체 참가자 수 (로컬 + 원격)

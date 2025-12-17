@@ -67,7 +67,10 @@ export async function run(runner, options = {}) {
   logger.info(prefix, `성공 여부: ${evaluation.passed ? "PASS" : "FAIL"}`);
   for (const criterion of evaluation.criteria) {
     const status = criterion.passed ? "✓" : "✗";
-    logger.info(prefix, `  ${status} ${criterion.name}: ${criterion.actual} (기준: ${criterion.expected})`);
+    logger.info(
+      prefix,
+      `  ${status} ${criterion.name}: ${criterion.actual} (기준: ${criterion.expected})`
+    );
   }
 
   return report;

@@ -15,8 +15,15 @@
  * @param {Object} socket - Socket.io 소켓 인스턴스
  * @param {Object} roomManager - RoomManager 인스턴스
  * @param {Object} mediasoupManager - MediasoupManager 인스턴스
+ * @param {Object} [roomTrafficLogger] - RoomTrafficLogger 인스턴스 (선택)
  */
-export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) => {
+export const registerSfuHandlers = (
+  io,
+  socket,
+  roomManager,
+  mediasoupManager,
+  roomTrafficLogger = null
+) => {
   // 파라미터 검증
   if (!io || !socket || !roomManager || !mediasoupManager) {
     throw new Error("[sfuHandler] 필수 파라미터가 누락되었습니다");
@@ -72,6 +79,11 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
 
       const transport = await mediasoupManager.createWebRtcTransport(router, socket.id, roomId);
 
+      // 트래픽 세션 시작 (첫 Transport 생성 시)
+      if (roomTrafficLogger && !roomTrafficLogger.hasSession(roomId)) {
+        roomTrafficLogger.startSession(roomId);
+      }
+
       console.log(`[sfu:create-send-transport] roomId=${roomId}, transportId=${transport.id}`);
 
       callback({
@@ -106,6 +118,11 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
       }
 
       const transport = await mediasoupManager.createWebRtcTransport(router, socket.id, roomId);
+
+      // 트래픽 세션 시작 (첫 Transport 생성 시)
+      if (roomTrafficLogger && !roomTrafficLogger.hasSession(roomId)) {
+        roomTrafficLogger.startSession(roomId);
+      }
 
       console.log(`[sfu:create-recv-transport] roomId=${roomId}, transportId=${transport.id}`);
 
@@ -483,8 +500,21 @@ export const registerSfuHandlers = (io, socket, roomManager, mediasoupManager) =
    * roomHandler의 disconnect와 별도로 SFU 리소스만 정리
    */
   socket.on("disconnect", () => {
+    // 세션 종료 검사 (리소스 정리 전에 roomId 조회)
+    const roomId = roomManager.getRoomIdBySocketId(socket.id);
+
     console.log(`[sfuHandler:disconnect] SFU 리소스 정리: ${socket.id}`);
     mediasoupManager.cleanupPeer(socket.id);
+
+    // 방에 남은 참가자가 없으면 세션 종료
+    if (roomId && roomTrafficLogger && roomTrafficLogger.hasSession(roomId)) {
+      const remaining = roomManager.getRoomParticipants(roomId);
+      // 자신 제외 (아직 RoomManager에서 제거 안 됐을 수 있음)
+      const othersCount = remaining.filter((id) => id !== socket.id).length;
+      if (othersCount === 0) {
+        roomTrafficLogger.endSession(roomId);
+      }
+    }
   });
 };
 

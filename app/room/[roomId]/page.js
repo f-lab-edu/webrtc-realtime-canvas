@@ -7,7 +7,7 @@ import AudioDebugPanel from "@/components/room/AudioDebugPanel";
 import ControlBar from "@/components/room/ControlBar";
 import NicknameInput from "@/components/room/NicknameInput";
 import SettingsPanel from "@/components/room/SettingsPanel";
-import VideoGrid from "@/components/room/VideoGrid";
+import VideoContainer from "@/components/room/VideoContainer";
 import VideoPlayer from "@/components/room/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import WhiteboardCanvas from "@/components/whiteboard/WhiteboardCanvas";
@@ -251,9 +251,9 @@ export default function RoomPage() {
         {isScreenShareMode ? (
           // 화면 공유 모드: 3:5:2 비율 (일반 모드와 동일, 중앙에만 화면 공유 오버레이)
           <>
-            {/* 왼쪽: 비디오 그리드 (30%) - 일반 모드와 동일 */}
+            {/* 왼쪽: 비디오 컨테이너 (30%) - 그리드/스피커 뷰 자동 전환 */}
             <aside className="flex-3 flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
-              <VideoGrid
+              <VideoContainer
                 localStream={localStream}
                 remoteStreams={remoteStreams}
                 isVideoEnabled={isVideoEnabled}
@@ -314,9 +314,9 @@ export default function RoomPage() {
         ) : (
           // 일반 모드: 3컬럼 레이아웃 (3:5:2 비율)
           <>
-            {/* 왼쪽: 비디오 그리드 (30%) */}
+            {/* 왼쪽: 비디오 컨테이너 (30%) - 그리드/스피커 뷰 자동 전환 */}
             <aside className="flex-3 flex flex-col bg-gray-950 border-r border-gray-800 overflow-hidden">
-              <VideoGrid
+              <VideoContainer
                 localStream={localStream}
                 remoteStreams={remoteStreams}
                 isVideoEnabled={isVideoEnabled}

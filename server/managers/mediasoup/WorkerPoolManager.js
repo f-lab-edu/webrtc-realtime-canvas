@@ -16,9 +16,9 @@
 import * as mediasoup from "mediasoup";
 import {
   numWorkers,
-  workerSettings,
   webRtcServerEnabled,
   webRtcServerOptions,
+  workerSettings,
 } from "../../config/mediasoupConfig.js";
 
 class WorkerPoolManager {

@@ -1,0 +1,81 @@
+/* VideoContainer.module.css - 하이브리드 비디오 컨테이너 */
+
+.container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 비디오 영역 (그리드 또는 스피커 뷰) */
+.videoArea {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 뷰 모드 토글 버튼 영역 */
+.toggleContainer {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* 토글 버튼 */
+.toggleButton {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  background-color: #374151;
+  color: #9ca3af;
+}
+
+.toggleButton:hover {
+  background-color: #4b5563;
+  color: #e5e7eb;
+}
+
+/* 활성화된 버튼 */
+.toggleButton.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* 자동 모드 표시 */
+.autoIndicator {
+  font-size: 10px;
+  color: #6b7280;
+  margin-left: 4px;
+}
+
+/* 참가자 수 표시 */
+.participantCount {
+  font-size: 11px;
+  color: #6b7280;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+}
+
+/* 반응형: 모바일에서 토글 버튼 숨기기 */
+@media (max-width: 768px) {
+  .toggleContainer {
+    padding: 2px;
+  }
+
+  .toggleButton {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .participantCount {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+}
