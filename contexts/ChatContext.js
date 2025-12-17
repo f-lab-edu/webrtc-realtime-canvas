@@ -104,8 +104,9 @@ export function ChatProvider({ children }) {
 
     logger.info("CHAT", "Socket 이벤트 리스너 등록 완료", {
       events: ["chat:message", "chat:error"],
+      roomId,
     });
-    console.log("[ChatContext] Socket 이벤트 리스너 등록 완료");
+    console.log("[ChatContext] Socket 이벤트 리스너 등록 완료, roomId:", roomId);
 
     // 클린업 함수
     return () => {
@@ -120,7 +121,7 @@ export function ChatProvider({ children }) {
         console.log("[ChatContext] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
       }
     };
-  }, [socketService, isConnected, nickname]);
+  }, [socketService, isConnected, nickname, roomId]);
 
   /**
    * 닉네임 변경 시 ChatService 업데이트
@@ -197,6 +198,23 @@ export function ChatProvider({ children }) {
       }
     };
   }, [socketService, isConnected]);
+
+  /**
+   * 방 변경 시 메시지 초기화
+   * roomId가 변경되면 이전 방의 채팅 기록을 제거
+   */
+  useEffect(() => {
+    // roomId가 변경되면 메시지 초기화
+    setMessages([]);
+    setUnreadCount(0);
+
+    if (chatServiceRef.current) {
+      chatServiceRef.current.clearMessages();
+    }
+
+    logger.info("CHAT", "방 변경으로 채팅 초기화", { roomId });
+    console.log("[ChatContext] 방 변경으로 채팅 초기화:", roomId);
+  }, [roomId]);
 
   /**
    * 메시지 전송
