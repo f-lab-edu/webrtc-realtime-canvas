@@ -299,7 +299,9 @@ class RoomTrafficLogger {
             session.packetsLost += stat.packetsLost || 0;
 
             if (typeof stat.jitter === "number" && stat.jitter >= 0) {
-              session.jitterSum += stat.jitter;
+              // RTP timestamp 단위를 ms로 변환 (비디오: 90kHz 클럭)
+              const jitterMs = stat.jitter / 90;
+              session.jitterSum += jitterMs;
               session.jitterCount++;
             }
             if (typeof stat.roundTripTime === "number" && stat.roundTripTime > 0) {
@@ -384,10 +386,9 @@ class RoomTrafficLogger {
         : "0.00";
 
     // 품질 지표 계산
-    // mediasoup jitter는 초 단위로 반환되므로 ms로 변환 (* 1000)
     const avgJitterMs =
       session.jitterCount > 0
-        ? ((session.jitterSum / session.jitterCount) * 1000).toFixed(2)
+        ? (session.jitterSum / session.jitterCount).toFixed(2)
         : "0.00";
     const avgRtt = session.rttCount > 0 ? (session.rttSum / session.rttCount).toFixed(2) : "0.00";
     const totalPackets = session.packetsReceived + session.packetsLost;
