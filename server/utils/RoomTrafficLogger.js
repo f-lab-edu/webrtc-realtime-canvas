@@ -435,28 +435,27 @@ class RoomTrafficLogger {
       totalPackets > 0 ? ((session.packetsLost / totalPackets) * 100).toFixed(2) : "0.00";
 
     const content = `========== 세션 종료: ${timestamp} ==========
-방 ID: ${session.roomId}
-세션 ID: ${session.id}
----
-[세션 요약]
-- 세션 지속 시간: ${durationSec}초
-- 최대 동시 참가자: ${session.maxParticipants}명
-- 최대 동시 Transport: ${session.maxTransports}
-- 최대 동시 Producer: ${session.maxProducers}
-- 최대 동시 Consumer: ${session.maxConsumers}
-[리소스 사용량]
-- 최대 CPU 사용률: ${session.maxCpuPercent}%
-- 최대 메모리 사용량: ${session.maxMemoryMb} MB
-[트래픽 통계]
-- 총 수신: ${totalReceivedMB} MB (평균 ${avgInboundMbps} Mbps)
-- 총 송신: ${totalSentMB} MB (평균 ${avgOutboundMbps} Mbps)
-[품질 지표]
-- 패킷 손실률: ${packetLossRate}%
-- 평균 Jitter: ${avgJitterMs}ms
-- 평균 RTT: ${avgRtt}ms
----
-
-`;
+      방 ID: ${session.roomId}
+      세션 ID: ${session.id}
+      ---
+      [세션 요약]
+      - 세션 지속 시간: ${durationSec}초
+      - 최대 동시 참가자: ${session.maxParticipants}명
+      - 최대 동시 Transport: ${session.maxTransports}
+      - 최대 동시 Producer: ${session.maxProducers}
+      - 최대 동시 Consumer: ${session.maxConsumers}
+      [리소스 사용량]
+      - 최대 CPU 사용률: ${session.maxCpuPercent}%
+      - 최대 메모리 사용량: ${session.maxMemoryMb} MB
+      [트래픽 통계]
+      - 총 수신: ${totalReceivedMB} MB (평균 ${avgInboundMbps} Mbps)
+      - 총 송신: ${totalSentMB} MB (평균 ${avgOutboundMbps} Mbps)
+      [품질 지표]
+      - 패킷 손실률: ${packetLossRate}%
+      - 평균 Jitter: ${avgJitterMs}ms
+      - 평균 RTT: ${avgRtt}ms
+      ---
+      `;
     this._appendToLog(content);
   }
 

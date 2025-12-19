@@ -41,6 +41,9 @@ const mediasoupManager = MediasoupManager.getInstance();
 // RoomTrafficLogger 인스턴스 (트래픽 기반 로깅)
 let roomTrafficLogger = null;
 
+// CpuProfiler 인스턴스 (CPU 프로파일링)
+let cpuProfiler = null;
+
 // 헬스 체크 엔드포인트
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -87,7 +90,7 @@ io.on("connection", (socket) => {
   registerChatHandlers(io, socket, roomManager);
 
   // SFU 이벤트 핸들러 등록
-  registerSfuHandlers(io, socket, roomManager, mediasoupManager, roomTrafficLogger);
+  registerSfuHandlers(io, socket, roomManager, mediasoupManager, roomTrafficLogger, cpuProfiler);
 });
 
 // 서버 시작
@@ -105,6 +108,16 @@ const startServer = async () => {
       intervalMs: Number(process.env.METRICS_INTERVAL_MS) || 1000,
     });
     console.log("트래픽 로깅 활성화: 세션 기반 로깅");
+
+    // CpuProfiler 초기화 (환경변수로 활성화)
+    if (process.env.CPU_PROFILING_ENABLED === "true") {
+      const CpuProfiler = (await import("./utils/CpuProfiler.js")).default;
+      cpuProfiler = await CpuProfiler.create({
+        enabled: true,
+        logDir: process.env.CPU_PROFILE_LOG_DIR || "./logs/profile",
+      });
+      console.log("CPU 프로파일링 활성화: 세션 기반 프로파일링");
+    }
 
     httpServer.listen(PORT, () => {
       console.log(`Signaling server running on port ${PORT}`);
@@ -136,9 +149,10 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 // 정상 종료 시 리소스 정리
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("SIGTERM 신호 수신, 서버 종료 중...");
   if (roomTrafficLogger) roomTrafficLogger.cleanup();
+  if (cpuProfiler) await cpuProfiler.cleanup();
   mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {
@@ -147,9 +161,10 @@ process.on("SIGTERM", () => {
   });
 });
 
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("SIGINT 신호 수신, 서버 종료 중...");
   if (roomTrafficLogger) roomTrafficLogger.cleanup();
+  if (cpuProfiler) await cpuProfiler.cleanup();
   mediasoupManager.cleanup();
   roomManager.cleanup();
   httpServer.close(() => {

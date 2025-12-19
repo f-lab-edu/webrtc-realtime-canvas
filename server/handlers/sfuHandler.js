@@ -16,13 +16,15 @@
  * @param {Object} roomManager - RoomManager 인스턴스
  * @param {Object} mediasoupManager - MediasoupManager 인스턴스
  * @param {Object} [roomTrafficLogger] - RoomTrafficLogger 인스턴스 (선택)
+ * @param {Object} [cpuProfiler] - CpuProfiler 인스턴스 (선택)
  */
 export const registerSfuHandlers = (
   io,
   socket,
   roomManager,
   mediasoupManager,
-  roomTrafficLogger = null
+  roomTrafficLogger = null,
+  cpuProfiler = null
 ) => {
   // 파라미터 검증
   if (!io || !socket || !roomManager || !mediasoupManager) {
@@ -84,6 +86,11 @@ export const registerSfuHandlers = (
         roomTrafficLogger.startSession(roomId);
       }
 
+      // CPU 프로파일 세션 시작 (첫 Transport 생성 시)
+      if (cpuProfiler && !cpuProfiler.hasSession(roomId)) {
+        cpuProfiler.startSession(roomId);
+      }
+
       console.log(`[sfu:create-send-transport] roomId=${roomId}, transportId=${transport.id}`);
 
       callback({
@@ -122,6 +129,11 @@ export const registerSfuHandlers = (
       // 트래픽 세션 시작 (첫 Transport 생성 시)
       if (roomTrafficLogger && !roomTrafficLogger.hasSession(roomId)) {
         roomTrafficLogger.startSession(roomId);
+      }
+
+      // CPU 프로파일 세션 시작 (첫 Transport 생성 시)
+      if (cpuProfiler && !cpuProfiler.hasSession(roomId)) {
+        cpuProfiler.startSession(roomId);
       }
 
       console.log(`[sfu:create-recv-transport] roomId=${roomId}, transportId=${transport.id}`);
@@ -516,6 +528,11 @@ export const registerSfuHandlers = (
       const othersCount = remaining.filter((id) => id !== socket.id).length;
       if (othersCount === 0) {
         roomTrafficLogger.endSession(roomId);
+
+        // CPU 프로파일 세션 종료
+        if (cpuProfiler && cpuProfiler.hasSession(roomId)) {
+          cpuProfiler.endSession(roomId);
+        }
       }
     }
   });

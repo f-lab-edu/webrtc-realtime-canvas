@@ -250,6 +250,7 @@ $RECYCLE.BIN/
 # additional
 .claude
 /documents/**
+/docs/**
 claude.md
 
 .kiro
@@ -259,5 +260,8 @@ gemini.md
 
 metrics/**
 public/video/**
+logs/profile/**
 pinggy.exe
 .env.local.pinggy
+
+_bmad
