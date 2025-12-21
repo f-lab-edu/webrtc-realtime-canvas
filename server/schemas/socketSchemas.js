@@ -47,7 +47,7 @@ export const setNicknameSchema = z.object({
 export const roomJoinSchema = z.object({
   roomId: roomIdSchema,
   nickname: nicknameSchema.optional(), // 닉네임은 선택적 (나중에 설정 가능)
-  maxParticipants: z.number().int().min(2).max(10).optional(), // 최대 참가자 수 (선택적)
+  maxParticipants: z.number().int().min(2).max(100).optional(), // 최대 참가자 수 (선택적)
 });
 
 /**

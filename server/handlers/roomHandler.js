@@ -5,7 +5,7 @@
 import { roomJoinSchema, roomLeaveSchema, setNicknameSchema } from "../schemas/socketSchemas.js";
 
 // 서버 설정 상수 (SFU 모드 기준)
-const ABSOLUTE_MAX_PARTICIPANTS = 20; // 서버가 허용하는 절대 최대값
+const ABSOLUTE_MAX_PARTICIPANTS = 100; // 서버가 허용하는 절대 최대값
 const RECOMMENDED_MAX_PARTICIPANTS = 15; // 권장 최대값 (성능 고려)
 
 /**

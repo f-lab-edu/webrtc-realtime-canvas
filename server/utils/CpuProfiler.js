@@ -21,195 +21,212 @@ import path from "node:path";
 let profiler = null;
 
 class CpuProfiler {
-	/**
-	 * 팩토리 메서드 - 비동기 초기화를 위해 사용
-	 * @param {Object} options - 설정 옵션
-	 * @returns {Promise<CpuProfiler>}
-	 */
-	static async create(options = {}) {
-		const instance = new CpuProfiler(options);
-		await instance._initProfiler();
-		return instance;
-	}
+  /**
+   * 팩토리 메서드 - 비동기 초기화를 위해 사용
+   * @param {Object} options - 설정 옵션
+   * @returns {Promise<CpuProfiler>}
+   */
+  static async create(options = {}) {
+    const instance = new CpuProfiler(options);
+    await instance._initProfiler();
+    return instance;
+  }
 
-	/**
-	 * @param {Object} options - 설정 옵션
-	 * @param {boolean} [options.enabled=false] - 프로파일링 활성화 여부
-	 * @param {string} [options.logDir='./logs/profile'] - 프로파일 저장 디렉토리
-	 */
-	constructor(options = {}) {
-		this.enabled = options.enabled || false;
-		this.logDir = options.logDir || "./logs/profile";
-		this.sessions = new Map(); // Map<roomId, SessionData>
+  /**
+   * @param {Object} options - 설정 옵션
+   * @param {boolean} [options.enabled=false] - 프로파일링 활성화 여부
+   * @param {string} [options.logDir='./logs/profile'] - 프로파일 저장 디렉토리
+   */
+  constructor(options = {}) {
+    this.enabled = options.enabled || false;
+    this.logDir = options.logDir || "./logs/profile";
+    this.sessions = new Map(); // Map<roomId, SessionData>
 
-		// 로그 디렉토리 생성
-		this._ensureLogDir();
+    // 로그 디렉토리 생성
+    this._ensureLogDir();
 
-		console.log("[CpuProfiler] 인스턴스 생성");
-	}
+    console.log("[CpuProfiler] 인스턴스 생성");
+  }
 
-	/**
-	 * v8-profiler-next 초기화 (비동기)
-	 * @private
-	 */
-	async _initProfiler() {
-		if (!this.enabled) return;
+  /**
+   * v8-profiler-next 초기화 (비동기)
+   * @private
+   */
+  async _initProfiler() {
+    if (!this.enabled) return;
 
-		try {
-			// 동적 import (native 모듈)
-			const module = await import("v8-profiler-next");
-			profiler = module.default;
+    try {
+      // 동적 import (native 모듈)
+      const module = await import("v8-profiler-next");
+      profiler = module.default;
 
-			// 고해상도 샘플링 설정 (기본값 사용)
-			profiler.setGenerateType(1);
+      // 고해상도 샘플링 설정 (기본값 사용)
+      profiler.setGenerateType(1);
 
-			console.log("[CpuProfiler] v8-profiler-next 초기화 완료");
-		} catch (error) {
-			console.error(`[CpuProfiler:ERROR] v8-profiler-next 초기화 실패: ${error.message}`);
-			console.error("[CpuProfiler:ERROR] npm install v8-profiler-next 실행 필요");
-			this.enabled = false;
-		}
-	}
+      console.log("[CpuProfiler] v8-profiler-next 초기화 완료");
+    } catch (error) {
+      console.error(`[CpuProfiler:ERROR] v8-profiler-next 초기화 실패: ${error.message}`);
+      console.error("[CpuProfiler:ERROR] npm install v8-profiler-next 실행 필요");
+      this.enabled = false;
+    }
+  }
 
-	/**
-	 * 로그 디렉토리 생성
-	 * @private
-	 */
-	_ensureLogDir() {
-		const absPath = path.resolve(this.logDir);
-		if (!fs.existsSync(absPath)) {
-			fs.mkdirSync(absPath, { recursive: true });
-			console.log(`[CpuProfiler] 디렉토리 생성: ${absPath}`);
-		}
-	}
+  /**
+   * 로그 디렉토리 생성
+   * @private
+   */
+  _ensureLogDir() {
+    const absPath = path.resolve(this.logDir);
+    if (!fs.existsSync(absPath)) {
+      fs.mkdirSync(absPath, { recursive: true });
+      console.log(`[CpuProfiler] 디렉토리 생성: ${absPath}`);
+    }
+  }
 
-	/**
-	 * 세션 존재 여부 확인
-	 * @param {string} roomId - 방 ID
-	 * @returns {boolean}
-	 */
-	hasSession(roomId) {
-		return this.sessions.has(roomId);
-	}
+  /**
+   * 세션 존재 여부 확인
+   * @param {string} roomId - 방 ID
+   * @returns {boolean}
+   */
+  hasSession(roomId) {
+    return this.sessions.has(roomId);
+  }
 
-	/**
-	 * 세션 시작 (CPU 프로파일 시작)
-	 * @param {string} roomId - 방 ID
-	 */
-	startSession(roomId) {
-		// 파라미터 검증
-		if (!this.enabled || !roomId) return;
-		if (!profiler) {
-			console.warn("[CpuProfiler:WARN] 프로파일러가 초기화되지 않았습니다.");
-			return;
-		}
-		if (this.sessions.has(roomId)) return;
+  /**
+   * Date를 KST 포맷 문자열로 변환
+   * @param {Date} date
+   * @returns {string} YYMMDD-HHmmss-mmm 형식
+   */
+  _formatKST(date) {
+    const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    const yy = String(kst.getUTCFullYear()).slice(-2);
+    const mm = String(kst.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(kst.getUTCDate()).padStart(2, "0");
+    const hh = String(kst.getUTCHours()).padStart(2, "0");
+    const mi = String(kst.getUTCMinutes()).padStart(2, "0");
+    const ss = String(kst.getUTCSeconds()).padStart(2, "0");
+    const ms = String(kst.getUTCMilliseconds()).padStart(3, "0");
+    return `${yy}${mm}${dd}-${hh}${mi}${ss}-${ms}`;
+  }
 
-		const session = {
-			id: `sess-${Date.now()}-${roomId}`,
-			roomId,
-			startTime: new Date(),
-			profileName: null,
-		};
+  /**
+   * 세션 시작 (CPU 프로파일 시작)
+   * @param {string} roomId - 방 ID
+   */
+  startSession(roomId) {
+    // 파라미터 검증
+    if (!this.enabled || !roomId) return;
+    if (!profiler) {
+      console.warn("[CpuProfiler:WARN] 프로파일러가 초기화되지 않았습니다.");
+      return;
+    }
+    if (this.sessions.has(roomId)) return;
 
-		try {
-			// v8-profiler-next 시작 (recsamples=true: 샘플링 기반)
-			profiler.startProfiling(session.id, true);
-			session.profileName = session.id;
-			this.sessions.set(roomId, session);
+    const session = {
+      id: `sess-${this._formatKST(new Date())}-${roomId}`,
+      roomId,
+      startTime: new Date(),
+      profileName: null,
+    };
 
-			console.log(`[CpuProfiler] 세션 시작: roomId=${roomId}, sessionId=${session.id}`);
-		} catch (error) {
-			console.error(`[CpuProfiler:ERROR] 세션 시작 실패: ${error.message}`);
-		}
-	}
+    try {
+      // v8-profiler-next 시작 (recsamples=true: 샘플링 기반)
+      profiler.startProfiling(session.id, true);
+      session.profileName = session.id;
+      this.sessions.set(roomId, session);
 
-	/**
-	 * 세션 종료 (CPU 프로파일 저장)
-	 * @param {string} roomId - 방 ID
-	 */
-	async endSession(roomId) {
-		// 파라미터 검증
-		if (!this.enabled || !roomId) return;
-		if (!profiler) return;
+      console.log(`[CpuProfiler] 세션 시작: roomId=${roomId}, sessionId=${session.id}`);
+    } catch (error) {
+      console.error(`[CpuProfiler:ERROR] 세션 시작 실패: ${error.message}`);
+    }
+  }
 
-		const session = this.sessions.get(roomId);
-		if (!session) return;
+  /**
+   * 세션 종료 (CPU 프로파일 저장)
+   * @param {string} roomId - 방 ID
+   */
+  async endSession(roomId) {
+    // 파라미터 검증
+    if (!this.enabled || !roomId) return;
+    if (!profiler) return;
 
-		try {
-			// 프로파일 종료
-			const profile = profiler.stopProfiling(session.profileName);
+    const session = this.sessions.get(roomId);
+    if (!session) return;
 
-			if (!profile) {
-				console.warn(`[CpuProfiler:WARN] 프로파일 없음: ${session.profileName}`);
-				this.sessions.delete(roomId);
-				return;
-			}
+    try {
+      // 프로파일 종료
+      const profile = profiler.stopProfiling(session.profileName);
 
-			// 비동기 export (Event Loop Blocking 완화)
-			await this._exportProfile(profile, session);
+      if (!profile) {
+        console.warn(`[CpuProfiler:WARN] 프로파일 없음: ${session.profileName}`);
+        this.sessions.delete(roomId);
+        return;
+      }
 
-			// 메모리 정리 (중요!)
-			profile.delete();
+      // 비동기 export (Event Loop Blocking 완화)
+      await this._exportProfile(profile, session);
 
-			this.sessions.delete(roomId);
+      // 메모리 정리 (중요!)
+      profile.delete();
 
-			console.log(`[CpuProfiler] 세션 종료: roomId=${roomId}, sessionId=${session.id}`);
-		} catch (error) {
-			console.error(`[CpuProfiler:ERROR] 세션 종료 실패: ${error.message}`);
-			this.sessions.delete(roomId);
-		}
-	}
+      this.sessions.delete(roomId);
 
-	/**
-	 * 프로파일 export (비동기 처리)
-	 * @param {Object} profile - v8-profiler 프로파일 객체
-	 * @param {Object} session - 세션 데이터
-	 * @returns {Promise<void>}
-	 * @private
-	 */
-	_exportProfile(profile, session) {
-		return new Promise((resolve, reject) => {
-			profile.export((error, result) => {
-				if (error) {
-					reject(error);
-					return;
-				}
+      console.log(`[CpuProfiler] 세션 종료: roomId=${roomId}, sessionId=${session.id}`);
+    } catch (error) {
+      console.error(`[CpuProfiler:ERROR] 세션 종료 실패: ${error.message}`);
+      this.sessions.delete(roomId);
+    }
+  }
 
-				try {
-					const sizeMB = Buffer.byteLength(result, "utf8") / 1024 / 1024;
+  /**
+   * 프로파일 export (비동기 처리)
+   * @param {Object} profile - v8-profiler 프로파일 객체
+   * @param {Object} session - 세션 데이터
+   * @returns {Promise<void>}
+   * @private
+   */
+  _exportProfile(profile, session) {
+    return new Promise((resolve, reject) => {
+      profile.export((error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
 
-					// 파일 크기 경고 (50MB 이상)
-					if (sizeMB > 50) {
-						console.warn(`[CpuProfiler:WARN] 프로파일 크기가 큼: ${sizeMB.toFixed(2)} MB`);
-					}
+        try {
+          const sizeMB = Buffer.byteLength(result, "utf8") / 1024 / 1024;
 
-					const filename = `cpu-${session.id}.cpuprofile`;
-					const filepath = path.join(this.logDir, filename);
+          // 파일 크기 경고 (50MB 이상)
+          if (sizeMB > 50) {
+            console.warn(`[CpuProfiler:WARN] 프로파일 크기가 큼: ${sizeMB.toFixed(2)} MB`);
+          }
 
-					fs.writeFileSync(filepath, result, "utf8");
-					console.log(`[CpuProfiler] 저장: ${filepath} (${sizeMB.toFixed(2)} MB)`);
+          const filename = `cpu-${session.id}.cpuprofile`;
+          const filepath = path.join(this.logDir, filename);
 
-					resolve();
-				} catch (writeError) {
-					console.error(`[CpuProfiler:ERROR] 파일 저장 실패: ${writeError.message}`);
-					reject(writeError);
-				}
-			});
-		});
-	}
+          fs.writeFileSync(filepath, result, "utf8");
+          console.log(`[CpuProfiler] 저장: ${filepath} (${sizeMB.toFixed(2)} MB)`);
 
-	/**
-	 * 모든 세션 종료 (서버 종료 시 호출)
-	 */
-	async cleanup() {
-		if (!this.enabled) return;
+          resolve();
+        } catch (writeError) {
+          console.error(`[CpuProfiler:ERROR] 파일 저장 실패: ${writeError.message}`);
+          reject(writeError);
+        }
+      });
+    });
+  }
 
-		for (const roomId of this.sessions.keys()) {
-			await this.endSession(roomId);
-		}
-		console.log("[CpuProfiler] 리소스 정리 완료");
-	}
+  /**
+   * 모든 세션 종료 (서버 종료 시 호출)
+   */
+  async cleanup() {
+    if (!this.enabled) return;
+
+    for (const roomId of this.sessions.keys()) {
+      await this.endSession(roomId);
+    }
+    console.log("[CpuProfiler] 리소스 정리 완료");
+  }
 }
 
 export default CpuProfiler;
