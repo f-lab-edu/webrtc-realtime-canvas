@@ -395,11 +395,9 @@ class RoomTrafficLogger {
   _writeSessionStart(session) {
     const timestamp = this._getKoreanTimestamp();
     const content = `========== 세션 시작: ${timestamp} ==========
-방 ID: ${session.roomId}
-세션 ID: ${session.id}
----
-
-`;
+      방 ID: ${session.roomId}
+      세션 ID: ${session.id}
+      ---`;
     this._appendToLog(content);
   }
 
@@ -470,7 +468,7 @@ class RoomTrafficLogger {
     const filepath = path.join(this.logDir, filename);
 
     try {
-      fs.appendFileSync(filepath, content, "utf8");
+      fs.appendFileSync(filepath, `\n${content}`, "utf8");
     } catch (error) {
       console.error(`[RoomTrafficLogger] 로그 파일 쓰기 실패: ${error.message}`);
     }
