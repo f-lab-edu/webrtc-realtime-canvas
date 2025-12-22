@@ -2,12 +2,26 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import SocketService from "@/services/SocketService";
+import { JOIN_FAILURE_REASONS } from "@/shared/joinFailureReasons";
 
 /**
  * RoomContext
  * 방 ID, 참가자 목록, 연결 상태를 관리하는 Context
  */
 const RoomContext = createContext(null);
+
+/**
+ * 클라이언트 정보 수집
+ * @returns {Object} 클라이언트 정보
+ */
+const getClientInfo = () => ({
+  userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+  connectionType:
+    typeof navigator !== "undefined" && navigator.connection
+      ? navigator.connection.effectiveType
+      : null,
+  timestamp: Date.now(),
+});
 
 /**
  * RoomProvider 컴포넌트
@@ -89,11 +103,21 @@ export function RoomProvider({ children }) {
     });
 
     // 방 정원 초과
-    socketService.on("room:full", () => {
+    socketService.on("room:full", (data) => {
       console.error("방이 가득 찼습니다.");
       setConnectionState("disconnected");
       setIsConnected(false);
-      alert("이 방은 이미 2명이 참가 중입니다.");
+
+      // 서버에 실패 보고
+      socketService.emit("room:join-failure-report", {
+        roomId: targetRoomId,
+        reason: "ROOM_FULL",
+        errorMessage: JOIN_FAILURE_REASONS.ROOM_FULL,
+        clientInfo: getClientInfo(),
+        serverResponse: data,
+      });
+
+      alert("이 방은 이미 가득 찼습니다.");
     });
 
     // 새 참가자 입장
@@ -263,6 +287,29 @@ export function RoomProvider({ children }) {
       } catch (error) {
         console.error("방 참가 실패:", error);
         setConnectionState("disconnected");
+
+        // 서버에 실패 보고 (Socket이 연결된 경우에만)
+        const socketService = socketServiceRef.current;
+        if (socketService?.isSocketConnected()) {
+          // 에러 타입에 따라 실패 원인 분류
+          let reason = "SERVER_ERROR";
+          if (error.message?.includes("timeout")) {
+            reason = "NETWORK_TIMEOUT";
+          } else if (
+            error.message?.includes("refused") ||
+            error.message?.includes("ECONNREFUSED")
+          ) {
+            reason = "CONNECTION_REFUSED";
+          }
+
+          socketService.emit("room:join-failure-report", {
+            roomId: targetRoomId,
+            reason,
+            errorMessage: error.message || JOIN_FAILURE_REASONS[reason],
+            clientInfo: getClientInfo(),
+          });
+        }
+
         throw error;
       }
     },
