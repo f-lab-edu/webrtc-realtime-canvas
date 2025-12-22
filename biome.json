@@ -13,6 +13,7 @@
       "components/**/*.js",
       "components/**/*.jsx",
       "contexts/**/*.js",
+      "docs/**/*.js",
       "hooks/**/*.js",
       "lib/**/*.js",
       "server/**/*.js",
