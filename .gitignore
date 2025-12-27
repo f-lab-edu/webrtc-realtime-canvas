@@ -252,6 +252,7 @@ $RECYCLE.BIN/
 /documents/**
 /docs/**
 claude.md
+.gemini/
 
 .kiro
 claude.md
