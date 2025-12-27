@@ -114,9 +114,9 @@ class Logger {
     if (this.stream) {
       const argsStr =
         args.length > 0
-          ? " " + args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ")
+          ? ` ${args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ")}`
           : "";
-      this.stream.write(formattedMessage + argsStr + "\n");
+      this.stream.write(`${formattedMessage + argsStr}\n`);
     }
   }
 

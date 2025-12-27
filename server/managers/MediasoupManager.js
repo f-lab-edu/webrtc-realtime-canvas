@@ -156,7 +156,7 @@ class MediasoupManager {
    * @param {string} roomId 방 ID (WebRtcServer 조회용)
    * @returns {Promise<Object>}
    */
-  async createWebRtcTransport(router, socketId, roomId = null) {
+  async createWebRtcTransport(router, socketId, _roomId = null) {
     // WebRtcServer 획득 (단일 포트 모드에서는 하나만 존재)
     const webRtcServer = this.workerPoolManager.getWebRtcServer();
 

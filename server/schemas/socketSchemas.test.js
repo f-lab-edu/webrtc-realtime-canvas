@@ -3,9 +3,9 @@
  * 방 입장 실패 관련 Zod 스키마 검증 테스트
  */
 import {
+  clientInfoSchema,
   joinFailureReasonSchema,
   joinFailureReportSchema,
-  clientInfoSchema,
 } from "./socketSchemas.js";
 
 describe("joinFailureReasonSchema", () => {

@@ -10,7 +10,7 @@ import { whiteboardEventSchema } from "../schemas/socketSchemas.js";
  * @param {Object} socket - Socket.io 소켓 인스턴스
  * @param {Object} roomManager - RoomManager 인스턴스
  */
-export const registerWhiteboardHandlers = (io, socket, roomManager) => {
+export const registerWhiteboardHandlers = (_io, socket, roomManager) => {
   /**
    * whiteboard:event 이벤트 핸들러 (호스트 전용)
    * 화이트보드 그리기 이벤트를 방의 다른 참가자들에게 중계

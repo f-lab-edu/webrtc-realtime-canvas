@@ -80,7 +80,7 @@ async function runLoadTest(options) {
   const prefix = "CLI:LoadTest";
 
   logger.info(prefix, "═".repeat(60));
-  logger.info(prefix, "  WebRTC SFU 부하 테스트 도구 v" + VERSION);
+  logger.info(prefix, `  WebRTC SFU 부하 테스트 도구 v${VERSION}`);
   logger.info(prefix, "═".repeat(60));
 
   // 옵션 파싱

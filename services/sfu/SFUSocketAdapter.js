@@ -40,7 +40,7 @@ class SFUSocketAdapter {
    * @returns {boolean}
    */
   isSocketConnected() {
-    return this.socketService && this.socketService.isSocketConnected();
+    return this.socketService?.isSocketConnected();
   }
 
   /**

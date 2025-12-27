@@ -567,7 +567,7 @@ export function SFUProvider({ children }) {
       socketService.off("sfu:producer-resumed", handleProducerResumed);
       socketService.off("room:participant-left", handleParticipantLeft);
     };
-  }, [socketService, isConnected, sfuState]);
+  }, [socketService, isConnected, sfuState, remoteProducers.get]);
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {

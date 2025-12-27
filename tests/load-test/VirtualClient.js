@@ -362,7 +362,7 @@ class VirtualClient {
         // SFU 상태가 있으면 우선 확인
         if (sfuState && sfuConnectionState) {
           const sendConnected = sfuConnectionState.send === "connected";
-          const recvConnected = sfuConnectionState.recv === "connected";
+          const _recvConnected = sfuConnectionState.recv === "connected";
           const isReady = sfuState === "ready";
 
           // Send Transport가 connected 상태면 미디어 전송 가능

@@ -530,7 +530,7 @@ export const registerSfuHandlers = (
         roomTrafficLogger.endSession(roomId);
 
         // CPU 프로파일 세션 종료
-        if (cpuProfiler && cpuProfiler.hasSession(roomId)) {
+        if (cpuProfiler?.hasSession(roomId)) {
           cpuProfiler.endSession(roomId);
         }
       }
