@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useRoomContext } from "@/contexts/RoomContext";
-import { useWhiteboard } from "@/contexts/WhiteboardContext";
+import { useRoomContext, useWhiteboard } from "@/contexts";
 
 /**
  * WhiteboardToolbar 컴포넌트

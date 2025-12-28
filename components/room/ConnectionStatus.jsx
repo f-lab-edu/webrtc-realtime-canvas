@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useRoomContext } from "@/contexts";
 import useWebRTC from "@/hooks/useWebRTC";
 
 /**

@@ -1,0 +1,99 @@
+# ============================================
+# WebRTC SFU Server - Docker Compose
+# 목적: 부하 테스트 환경 (AWS t3.medium 유사)
+# ============================================
+
+services:
+  sfu-server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: webrtc-sfu-server
+
+    # ============================================
+    # 리소스 제한 (AWS t3.medium: 2 vCPU, 4GB RAM)
+    # ============================================
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+    # ============================================
+    # 포트 매핑
+    # WebRtcServer 사용 시 단일 포트(10000)만 필요
+    # 기존 포트 범위(10000-10200)는 WebRtcServer 비활성화 시 사용
+    # ============================================
+    ports:
+      - "3100:3100"         # 시그널링 서버 (Socket.io)
+      - "10000-10200:10000-10200/udp"   # RTP 미디어 (UDP) - WebRtcServer는 10000 사용
+      - "10000-10200:10000-10200/tcp"   # RTP 미디어 (TCP 폴백)
+
+    # ============================================
+    # 환경변수
+    # ============================================
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      # CORS 설정 (Pinggy 터널 사용 시 * 또는 터널 URL로 변경)
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      # mediasoup 네트워크 설정
+      - MEDIASOUP_LISTEN_IP=0.0.0.0
+      # 로컬 테스트: 127.0.0.1 (브라우저와 Docker가 같은 호스트)
+      # Pinggy UDP 터널 사용 시: 터널 도메인으로 변경 필요
+      # 예: MEDIASOUP_ANNOUNCED_IP=xxx.t.pinggy.online
+      - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      # mediasoup Worker 수 (Docker CPU 제한에 맞춤)
+      # WebRtcServer 단일 포트 모드: 1 (Pinggy 터널)
+      # 멀티 Worker 모드: CPU 코어 수 (AWS 등 클라우드)
+      - MEDIASOUP_NUM_WORKERS=${MEDIASOUP_NUM_WORKERS:-1}
+      # ============================================
+      # WebRtcServer 설정 (단일 포트 다중화)
+      # ============================================
+      - MEDIASOUP_WEBRTC_SERVER_ENABLED=${MEDIASOUP_WEBRTC_SERVER_ENABLED:-true}
+      - MEDIASOUP_WEBRTC_SERVER_LISTEN_IP=0.0.0.0
+      - MEDIASOUP_WEBRTC_SERVER_PORT=${MEDIASOUP_WEBRTC_SERVER_PORT:-10000}
+      # Pinggy UDP 터널 사용 시: 터널 도메인:포트로 변경 필요
+      # 예: MEDIASOUP_ANNOUNCED_ADDRESS=xxx.pinggy.link:49349
+      - MEDIASOUP_ANNOUNCED_ADDRESS=${MEDIASOUP_ANNOUNCED_ADDRESS:-127.0.0.1:10000}
+      # 모니터링 설정
+      - ENABLE_MONITORING=true
+      - METRICS_INTERVAL_MS=1000
+      - METRICS_OUTPUT_DIR=/app/metrics
+      - METRICS_CONSOLE_OUTPUT=true
+
+    # ============================================
+    # 볼륨 마운트
+    # ============================================
+    volumes:
+      # 메트릭 CSV 파일 영속화
+      - ./metrics:/app/metrics
+      # 로그 파일 영속화
+      - ./logs:/app/logs
+
+    # ============================================
+    # 네트워크
+    # ============================================
+    networks:
+      - webrtc-network
+
+    # ============================================
+    # 재시작 정책
+    # ============================================
+    restart: unless-stopped
+
+    # ============================================
+    # 로깅 설정
+    # ============================================
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  webrtc-network:
+    driver: bridge

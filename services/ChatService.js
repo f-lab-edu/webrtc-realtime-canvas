@@ -144,6 +144,34 @@ class ChatService {
   }
 
   /**
+   * 시스템 메시지 생성 (참가자 입/퇴장 알림 등)
+   * @param {"joined" | "left"} action - 액션 타입
+   * @param {string} participantName - 참가자 닉네임
+   * @returns {Object} - 시스템 메시지 객체
+   */
+  createSystemMessage(action, participantName) {
+    if (!action || !participantName) {
+      console.warn("[ChatService] createSystemMessage: action 또는 participantName 누락");
+      return null;
+    }
+
+    const actionText = action === "joined" ? "님이 입장했습니다." : "님이 퇴장했습니다.";
+
+    const message = {
+      id: `sys_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      type: "system",
+      action,
+      content: `${participantName}${actionText}`,
+      participantName,
+      timestamp: new Date(),
+      isLocal: false,
+    };
+
+    console.log("[ChatService] 시스템 메시지 생성:", message);
+    return message;
+  }
+
+  /**
    * 고유 메시지 ID 생성
    * @private
    * @returns {string}

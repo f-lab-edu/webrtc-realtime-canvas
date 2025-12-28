@@ -2,12 +2,26 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import SocketService from "@/services/SocketService";
+import { JOIN_FAILURE_REASONS } from "@/shared/joinFailureReasons";
 
 /**
  * RoomContext
  * 방 ID, 참가자 목록, 연결 상태를 관리하는 Context
  */
 const RoomContext = createContext(null);
+
+/**
+ * 클라이언트 정보 수집
+ * @returns {Object} 클라이언트 정보
+ */
+const getClientInfo = () => ({
+  userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+  connectionType:
+    typeof navigator !== "undefined" && navigator.connection
+      ? navigator.connection.effectiveType
+      : null,
+  timestamp: Date.now(),
+});
 
 /**
  * RoomProvider 컴포넌트
@@ -28,6 +42,9 @@ export function RoomProvider({ children }) {
   const [isHost, setIsHost] = useState(false); // 현재 사용자가 호스트인지 여부
   const [hostSocketId, setHostSocketId] = useState(null); // 호스트의 socketId
   const [hasScreenSharePermission, setHasScreenSharePermission] = useState(false); // 화면 공유 권한
+
+  // 원격 화면 공유 상태 (다른 사용자가 화면 공유 중일 때)
+  const [screenShareInfo, setScreenShareInfo] = useState(null); // { socketId, nickname, isSharing }
 
   // SocketService 인스턴스 (ref로 관리하여 재생성 방지)
   const socketServiceRef = useRef(null);
@@ -86,11 +103,21 @@ export function RoomProvider({ children }) {
     });
 
     // 방 정원 초과
-    socketService.on("room:full", () => {
+    socketService.on("room:full", (data) => {
       console.error("방이 가득 찼습니다.");
       setConnectionState("disconnected");
       setIsConnected(false);
-      alert("이 방은 이미 2명이 참가 중입니다.");
+
+      // 서버에 실패 보고
+      socketService.emit("room:join-failure-report", {
+        roomId: targetRoomId,
+        reason: "ROOM_FULL",
+        errorMessage: JOIN_FAILURE_REASONS.ROOM_FULL,
+        clientInfo: getClientInfo(),
+        serverResponse: data,
+      });
+
+      alert("이 방은 이미 가득 찼습니다.");
     });
 
     // 새 참가자 입장
@@ -190,6 +217,32 @@ export function RoomProvider({ children }) {
       console.log("화면 공유 권한 회수됨");
       setHasScreenSharePermission(false);
     });
+
+    // 화면 공유 시작 (다른 사용자가 화면 공유 시작)
+    socketService.on("screen-share:started", (data) => {
+      const mySocketId = socketService.socket?.id;
+      // 내가 보낸 이벤트는 무시 (내 화면 공유는 MediaContext에서 관리)
+      if (data.socketId === mySocketId) {
+        return;
+      }
+      console.log("원격 화면 공유 시작:", data);
+      setScreenShareInfo({
+        socketId: data.socketId,
+        nickname: data.nickname || "참가자",
+        isSharing: true,
+      });
+    });
+
+    // 화면 공유 중지 (다른 사용자가 화면 공유 중지)
+    socketService.on("screen-share:stopped", (data) => {
+      const mySocketId = socketService.socket?.id;
+      // 내가 보낸 이벤트는 무시
+      if (data.socketId === mySocketId) {
+        return;
+      }
+      console.log("원격 화면 공유 중지:", data);
+      setScreenShareInfo(null);
+    });
   }, []);
 
   /**
@@ -234,6 +287,29 @@ export function RoomProvider({ children }) {
       } catch (error) {
         console.error("방 참가 실패:", error);
         setConnectionState("disconnected");
+
+        // 서버에 실패 보고 (Socket이 연결된 경우에만)
+        const socketService = socketServiceRef.current;
+        if (socketService?.isSocketConnected()) {
+          // 에러 타입에 따라 실패 원인 분류
+          let reason = "SERVER_ERROR";
+          if (error.message?.includes("timeout")) {
+            reason = "NETWORK_TIMEOUT";
+          } else if (
+            error.message?.includes("refused") ||
+            error.message?.includes("ECONNREFUSED")
+          ) {
+            reason = "CONNECTION_REFUSED";
+          }
+
+          socketService.emit("room:join-failure-report", {
+            roomId: targetRoomId,
+            reason,
+            errorMessage: error.message || JOIN_FAILURE_REASONS[reason],
+            clientInfo: getClientInfo(),
+          });
+        }
+
         throw error;
       }
     },
@@ -406,6 +482,7 @@ export function RoomProvider({ children }) {
     isHost,
     hostSocketId,
     hasScreenSharePermission,
+    screenShareInfo, // 원격 화면 공유 상태
     socketService: socketServiceRef.current,
     createRoom,
     joinRoom,

@@ -3,7 +3,7 @@
 import { ChevronDown, Mic, Video, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useMediaContext } from "@/contexts/MediaContext";
+import { useMediaContext } from "@/contexts";
 
 /**
  * 설정 패널 컴포넌트
@@ -303,7 +303,7 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
         {/* 버튼 그룹 */}
         <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
-          <Button onClick={onClose} variant="secondary" disabled={isReconnecting}>
+          <Button onClick={onClose} variant="outline" disabled={isReconnecting}>
             취소
           </Button>
           <Button onClick={handleSave} disabled={isReconnecting}>

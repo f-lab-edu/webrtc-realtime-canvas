@@ -17,7 +17,7 @@ A Next.js 16 application for 1:1 video chat with real-time whiteboard collaborat
 - **WebRTC**: SimplePeer
 - **Signaling**: Socket.io-client
 - **Canvas**: Fabric.js
-  
+
 ## Project Structure
 
 ```

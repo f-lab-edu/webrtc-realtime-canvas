@@ -7,10 +7,12 @@
  * 스타일링:
  * - 본인 메시지: 오른쪽 정렬, 파란색 배경, 닉네임 표시
  * - 상대방 메시지: 왼쪽 정렬, 회색 배경, 닉네임 강조 표시
+ * - 시스템 메시지: 중앙 정렬, 회색 배경, 작은 폰트
  *
  * @param {Object} props
  * @param {Object} props.message - 메시지 객체
  * @param {string} props.message.id - 메시지 ID
+ * @param {string} [props.message.type] - 메시지 타입 ("system" | undefined)
  * @param {string} props.message.senderId - 발신자 ID
  * @param {string} props.message.senderName - 발신자 닉네임
  * @param {string} props.message.content - 메시지 내용
@@ -18,7 +20,18 @@
  * @param {boolean} props.message.isLocal - 본인 메시지 여부
  */
 export default function ChatMessage({ message }) {
-  const { content, timestamp, isLocal, senderName } = message;
+  const { type, content, timestamp, isLocal, senderName } = message;
+
+  // 시스템 메시지 (참가자 입/퇴장 등): 중앙 정렬, 별도 스타일
+  if (type === "system") {
+    return (
+      <div className="flex justify-center my-2">
+        <span className="text-xs text-gray-400 bg-gray-800/60 px-3 py-1 rounded-full">
+          {content}
+        </span>
+      </div>
+    );
+  }
 
   // 시간 포맷 (HH:MM)
   const formatTime = (date) => {

@@ -116,7 +116,7 @@ export default function DeviceSelector({
         previewStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [selectedVideoId, selectedAudioId]);
+  }, [selectedVideoId, selectedAudioId, previewStream]);
 
   /**
    * 디바이스 선택 완료 처리

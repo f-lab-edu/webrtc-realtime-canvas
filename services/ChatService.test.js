@@ -195,7 +195,7 @@ describe("ChatService", () => {
 
     it("본인 메시지와 상대방 메시지를 isLocal로 구분할 수 있다", () => {
       // Given: 본인 메시지와 상대방 메시지
-      const localMessage = chatService.sendMessage("내 메시지");
+      const _localMessage = chatService.sendMessage("내 메시지");
 
       const remoteMessage = {
         id: "msg-2",

@@ -2,11 +2,17 @@
  * 방 관리 이벤트 핸들러
  * room:* 이벤트 처리
  */
-import { roomJoinSchema, roomLeaveSchema, setNicknameSchema } from "../schemas/socketSchemas.js";
+import {
+  joinFailureReportSchema,
+  roomJoinSchema,
+  roomLeaveSchema,
+  setNicknameSchema,
+} from "../schemas/socketSchemas.js";
+import joinFailureLogger from "../utils/JoinFailureLogger.js";
 
-// 서버 설정 상수
-const ABSOLUTE_MAX_PARTICIPANTS = 10; // 서버가 허용하는 절대 최대값
-const RECOMMENDED_MAX_PARTICIPANTS = 6; // 권장 최대값 (성능 고려)
+// 서버 설정 상수 (SFU 모드 기준)
+const ABSOLUTE_MAX_PARTICIPANTS = 100; // 서버가 허용하는 절대 최대값
+const RECOMMENDED_MAX_PARTICIPANTS = 15; // 권장 최대값 (성능 고려)
 
 /**
  * 방 관련 이벤트 핸들러 등록
@@ -94,6 +100,20 @@ export const registerRoomHandlers = (io, socket, roomManager) => {
       if (!result.success) {
         console.warn(`[room:join] 방 참가 실패: ${result.reason}`);
 
+        // 서버 측에서 직접 실패 로깅 (클라이언트 보고와 별개)
+        joinFailureLogger.logFailure({
+          socketId: socket.id,
+          roomId,
+          reason: result.reason,
+          errorMessage: `서버 측 감지: ${result.reason}`,
+          clientInfo: null, // 서버 측 로깅이므로 클라이언트 정보 없음
+          serverContext: {
+            currentSize: result.currentSize || null,
+            maxSize: result.maxSize || null,
+            source: "server-side",
+          },
+        });
+
         if (result.reason === "ROOM_FULL") {
           socket.emit("room:full", {
             currentSize: result.currentSize,
@@ -155,6 +175,42 @@ export const registerRoomHandlers = (io, socket, roomManager) => {
   socket.on("disconnect", (reason) => {
     console.log(`[disconnect] 소켓 ${socket.id} 연결 해제, 이유: ${reason}`);
     handleRoomLeave(io, socket, roomManager);
+  });
+
+  /**
+   * room:join-failure-report 이벤트 핸들러
+   * 클라이언트가 방 입장 실패를 보고할 때 호출됨
+   */
+  socket.on("room:join-failure-report", (data) => {
+    // Zod 스키마로 검증
+    const result = joinFailureReportSchema.safeParse(data);
+
+    if (!result.success) {
+      console.warn("[room:join-failure-report] 검증 실패:", result.error.errors);
+      return;
+    }
+
+    const { roomId, reason, errorMessage, clientInfo } = result.data;
+
+    // 서버 컨텍스트 정보 수집
+    const room = roomManager.getRoom(roomId);
+    const serverContext = room
+      ? {
+          currentSize: room.participants.size,
+          maxSize: room.maxParticipants,
+          source: "client-report", // 클라이언트 보고임을 표시
+        }
+      : { source: "client-report" };
+
+    // 로그 기록
+    joinFailureLogger.logFailure({
+      socketId: socket.id,
+      roomId,
+      reason,
+      errorMessage,
+      clientInfo,
+      serverContext,
+    });
   });
 };
 

@@ -3,6 +3,7 @@
  * Zod를 사용한 타입 안전한 데이터 검증
  */
 import { z } from "zod";
+import { JOIN_FAILURE_REASON_KEYS } from "../../shared/joinFailureReasons.js";
 
 /**
  * 방 ID 스키마
@@ -47,7 +48,7 @@ export const setNicknameSchema = z.object({
 export const roomJoinSchema = z.object({
   roomId: roomIdSchema,
   nickname: nicknameSchema.optional(), // 닉네임은 선택적 (나중에 설정 가능)
-  maxParticipants: z.number().int().min(2).max(10).optional(), // 최대 참가자 수 (선택적)
+  maxParticipants: z.number().int().min(2).max(100).optional(), // 최대 참가자 수 (선택적)
 });
 
 /**
@@ -146,4 +147,32 @@ export const mediaReconnectedSchema = z.object({
  */
 export const screenSharePermissionSchema = z.object({
   targetSocketId: socketIdSchema,
+});
+
+/**
+ * 방 입장 실패 원인 enum
+ * shared/joinFailureReasons.js에서 키 배열 import (단일 소스)
+ */
+export const joinFailureReasonSchema = z.enum(JOIN_FAILURE_REASON_KEYS);
+
+/**
+ * 클라이언트 정보 스키마
+ */
+export const clientInfoSchema = z
+  .object({
+    userAgent: z.string().nullable().optional(),
+    connectionType: z.string().nullable().optional(),
+    timestamp: z.number().int().positive(),
+  })
+  .optional();
+
+/**
+ * 방 입장 실패 보고 스키마
+ */
+export const joinFailureReportSchema = z.object({
+  roomId: roomIdSchema,
+  reason: joinFailureReasonSchema,
+  errorMessage: z.string().max(500).optional(),
+  clientInfo: clientInfoSchema,
+  serverResponse: z.any().optional(),
 });

@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useMediaContext } from "@/contexts/MediaContext";
-import { useRoomContext } from "@/contexts/RoomContext";
+import { useMediaContext, useRoomContext } from "@/contexts";
 
 /**
  * ControlBar 컴포넌트
@@ -70,7 +69,7 @@ export default function ControlBar({ onSettingsClick }) {
         }
 
         // 권한 있음: 화면 공유 시작
-        await startScreenShare();
+        await startScreenShare(hasScreenSharePermission, isHost);
       }
     } catch (error) {
       console.error("[ControlBar] 화면 공유 토글 에러:", error);
