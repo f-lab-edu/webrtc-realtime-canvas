@@ -210,6 +210,18 @@ npm start             # 프로덕션 서버
 
 설정 파일: `biome.json`, `.editorconfig`
 
+## Documentation
+
+📖 **[Wiki](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki)** 참조
+
+| 카테고리 | 페이지 | 설명 |
+|----------|--------|------|
+| 아키텍처 | [Architecture](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki/Architecture) | 상세 아키텍처 설명 |
+| | [Socket Event Specification](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki/Socket-Event-Specification) | Socket.io 이벤트 명세 |
+| 테스트 | [Load Test Report](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki/Load-Test-Report) | WebRTC 테스팅 Sass를 통한 부하 테스트 결과 |
+| | [Load-Testing-Tools](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki/Load-Testing-Tools) | 부하 테스트 도구 가이드 |
+| 트러블슈팅 | [Troubleshooting](https://github.com/f-lab-edu/webrtc-realtime-canvas/wiki/Troubleshooting) | 개발 과정 트러블슈팅 기록 |
+
 ## License
 
 See LICENSE file for details.
