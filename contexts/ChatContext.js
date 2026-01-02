@@ -1,0 +1,344 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import logger from "@/lib/logger";
+import ChatService from "@/services/ChatService";
+import { useRoomContext } from "./RoomContext";
+
+/**
+ * ChatContext
+ * 채팅 서비스 및 메시지 상태를 관리하는 Context
+ */
+const ChatContext = createContext(null);
+
+/**
+ * ChatProvider 컴포넌트
+ * ChatService 인스턴스 및 채팅 상태를 관리
+ */
+export function ChatProvider({ children }) {
+  // RoomContext에서 필요한 값 가져오기
+  const { socketService, roomId, isConnected, nickname, participantNicknames } = useRoomContext();
+
+  // participantNicknames를 ref로 저장 (퇴장 시 닉네임 조회용)
+  const participantNicknamesRef = useRef(new Map());
+
+  // ChatService 인스턴스 (ref로 관리하여 재생성 방지)
+  const chatServiceRef = useRef(null);
+
+  // 채팅 상태
+  const [messages, setMessages] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  /**
+   * ChatService 초기화 및 Socket 이벤트 리스너 설정
+   */
+  useEffect(() => {
+    if (!socketService || !isConnected) {
+      logger.warn("CHAT", "SocketService 대기 중", {
+        hasSocketService: !!socketService,
+        isConnected,
+      });
+      return;
+    }
+
+    const socketId = socketService.getSocketId();
+    if (!socketId) {
+      console.log("[ChatContext] Socket ID가 없습니다.");
+      return;
+    }
+
+    // ChatService 인스턴스 생성 또는 업데이트
+    if (!chatServiceRef.current) {
+      logger.info("CHAT", "ChatService 초기화", { socketId, nickname });
+      chatServiceRef.current = new ChatService(socketId, nickname);
+      console.log("[ChatContext] ChatService 초기화 완료, 닉네임:", nickname);
+    } else {
+      // Socket ID 및 닉네임 업데이트 (재연결 시)
+      chatServiceRef.current.updateCurrentUser(socketId, nickname);
+      console.log("[ChatContext] ChatService 업데이트:", { socketId, nickname });
+    }
+
+    // 현재 사용자 정보 업데이트
+    setCurrentUser(chatServiceRef.current.getCurrentUser());
+
+    // 메시지 수신 이벤트 핸들러 등록
+    chatServiceRef.current.onMessageReceived((message) => {
+      console.log("[ChatContext] 새 메시지 수신:", message);
+    });
+
+    // Socket 이벤트 핸들러: 원격 메시지 수신
+    const handleChatMessage = (data) => {
+      logger.info("CHAT", "원격 메시지 수신", data);
+
+      const { from, message } = data;
+      console.log("[ChatContext] 원격 메시지 수신 from:", from);
+
+      // 원격 메시지 생성 (isLocal: false)
+      const remoteMessage = {
+        ...message,
+        senderId: from,
+        isLocal: false,
+      };
+
+      logger.debug("CHAT", "원격 메시지 처리", remoteMessage);
+
+      // ChatService에 메시지 추가
+      chatServiceRef.current.addMessage(remoteMessage);
+
+      // UI 업데이트
+      setMessages((prevMessages) => [...prevMessages, remoteMessage]);
+      setUnreadCount((prevCount) => prevCount + 1);
+    };
+
+    // Socket 이벤트 핸들러: 채팅 에러
+    const handleChatError = (error) => {
+      logger.error("CHAT", "서버에서 채팅 에러 수신", error);
+      console.error("[ChatContext] 채팅 에러:", error);
+      alert(`채팅 에러: ${error.message}`);
+    };
+
+    // Socket 이벤트 리스너 등록
+    socketService.on("chat:message", handleChatMessage);
+    socketService.on("chat:error", handleChatError);
+
+    logger.info("CHAT", "Socket 이벤트 리스너 등록 완료", {
+      events: ["chat:message", "chat:error"],
+      roomId,
+    });
+    console.log("[ChatContext] Socket 이벤트 리스너 등록 완료, roomId:", roomId);
+
+    // 클린업 함수
+    return () => {
+      logger.info("CHAT", "Socket 이벤트 리스너 제거");
+      console.log("[ChatContext] Socket 이벤트 리스너 제거");
+
+      // Socket이 정리되지 않은 경우에만 이벤트 리스너 제거
+      if (socketService?.socket) {
+        socketService.off("chat:message", handleChatMessage);
+        socketService.off("chat:error", handleChatError);
+      } else {
+        console.log("[ChatContext] Socket이 이미 정리되어 이벤트 리스너 제거 스킵");
+      }
+    };
+  }, [socketService, isConnected, nickname, roomId]);
+
+  /**
+   * 닉네임 변경 시 ChatService 업데이트
+   */
+  useEffect(() => {
+    if (chatServiceRef.current && socketService && nickname) {
+      const socketId = socketService.getSocketId();
+      if (socketId) {
+        chatServiceRef.current.updateCurrentUser(socketId, nickname);
+        setCurrentUser(chatServiceRef.current.getCurrentUser());
+        console.log("[ChatContext] 닉네임 변경으로 ChatService 업데이트:", nickname);
+      }
+    }
+  }, [nickname, socketService]);
+
+  /**
+   * participantNicknames 변경 시 ref 업데이트
+   * (퇴장 이벤트에서 닉네임 조회에 사용)
+   */
+  useEffect(() => {
+    if (participantNicknames) {
+      participantNicknamesRef.current = new Map(participantNicknames);
+    }
+  }, [participantNicknames]);
+
+  /**
+   * 참가자 입/퇴장 이벤트 리스너
+   */
+  useEffect(() => {
+    if (!socketService || !isConnected || !chatServiceRef.current) {
+      return;
+    }
+
+    // 참가자 입장 핸들러
+    const handleParticipantJoined = (data) => {
+      const participantNickname = typeof data === "object" ? data.nickname : null;
+      if (!participantNickname) {
+        console.warn("[ChatContext] 입장 이벤트에 닉네임 없음");
+        return;
+      }
+
+      const systemMessage = chatServiceRef.current.createSystemMessage(
+        "joined",
+        participantNickname
+      );
+      if (systemMessage) {
+        setMessages((prev) => [...prev, systemMessage]);
+        console.log("[ChatContext] 참가자 입장 시스템 메시지 추가:", participantNickname);
+      }
+    };
+
+    // 참가자 퇴장 핸들러
+    const handleParticipantLeft = (socketId) => {
+      // participantNicknamesRef에서 닉네임 조회 (RoomContext가 삭제하기 전에 조회)
+      const participantNickname = participantNicknamesRef.current.get(socketId) || "익명";
+
+      const systemMessage = chatServiceRef.current.createSystemMessage("left", participantNickname);
+      if (systemMessage) {
+        setMessages((prev) => [...prev, systemMessage]);
+        console.log("[ChatContext] 참가자 퇴장 시스템 메시지 추가:", participantNickname);
+      }
+    };
+
+    socketService.on("room:participant-joined", handleParticipantJoined);
+    socketService.on("room:participant-left", handleParticipantLeft);
+
+    console.log("[ChatContext] 참가자 입/퇴장 이벤트 리스너 등록");
+
+    return () => {
+      if (socketService?.socket) {
+        socketService.off("room:participant-joined", handleParticipantJoined);
+        socketService.off("room:participant-left", handleParticipantLeft);
+        console.log("[ChatContext] 참가자 입/퇴장 이벤트 리스너 제거");
+      }
+    };
+  }, [socketService, isConnected]);
+
+  /**
+   * 방 변경 시 메시지 초기화
+   * roomId가 변경되면 이전 방의 채팅 기록을 제거
+   */
+  useEffect(() => {
+    // roomId가 변경되면 메시지 초기화
+    setMessages([]);
+    setUnreadCount(0);
+
+    if (chatServiceRef.current) {
+      chatServiceRef.current.clearMessages();
+    }
+
+    logger.info("CHAT", "방 변경으로 채팅 초기화", { roomId });
+    console.log("[ChatContext] 방 변경으로 채팅 초기화:", roomId);
+  }, [roomId]);
+
+  /**
+   * 메시지 전송
+   * @param {string} content - 메시지 내용
+   */
+  const sendMessage = useCallback(
+    (content) => {
+      logger.debug("CHAT", "sendMessage 호출됨", {
+        content,
+        roomId,
+        hasSocketService: !!socketService,
+      });
+
+      if (!chatServiceRef.current || !socketService || !roomId) {
+        const errorMsg = "채팅 서비스가 초기화되지 않았거나 연결되지 않았습니다.";
+        logger.error("CHAT", errorMsg, {
+          hasChatService: !!chatServiceRef.current,
+          hasSocketService: !!socketService,
+          roomId,
+        });
+        console.error("[ChatContext]", errorMsg);
+        return;
+      }
+
+      if (!content || content.trim() === "") {
+        logger.warn("CHAT", "빈 메시지 전송 시도");
+        console.log("[ChatContext] 빈 메시지는 전송할 수 없습니다.");
+        return;
+      }
+
+      try {
+        // 로컬 메시지 생성 (isLocal: true)
+        const localMessage = chatServiceRef.current.sendMessage(content);
+
+        if (!localMessage) {
+          logger.error("CHAT", "로컬 메시지 생성 실패");
+          return;
+        }
+
+        logger.info("CHAT", "로컬 메시지 생성 완료", localMessage);
+
+        // 즉시 UI에 표시 (optimistic update)
+        setMessages((prevMessages) => [...prevMessages, localMessage]);
+
+        // 서버로 전송할 데이터
+        const payload = {
+          roomId,
+          message: {
+            id: localMessage.id,
+            senderId: localMessage.senderId,
+            senderName: localMessage.senderName,
+            content: localMessage.content,
+            timestamp: localMessage.timestamp,
+          },
+        };
+
+        logger.info("CHAT", "서버로 메시지 전송 시도", payload);
+
+        // 서버로 메시지 전송
+        socketService.emit("chat:message", payload);
+
+        logger.info("CHAT", "메시지 전송 완료", { messageId: localMessage.id });
+        console.log("[ChatContext] 메시지 전송 완료:", localMessage);
+      } catch (error) {
+        logger.error("CHAT", "메시지 전송 에러", {
+          error: error.message,
+          stack: error.stack,
+        });
+        console.error("[ChatContext] 메시지 전송 에러:", error);
+      }
+    },
+    [socketService, roomId]
+  );
+
+  /**
+   * 읽지 않은 메시지 카운트 초기화
+   */
+  const clearUnreadCount = useCallback(() => {
+    if (!chatServiceRef.current) {
+      return;
+    }
+
+    chatServiceRef.current.clearUnreadCount();
+    setUnreadCount(0);
+    console.log("[ChatContext] 읽지 않은 메시지 카운트 초기화");
+  }, []);
+
+  /**
+   * 컴포넌트 언마운트 시 ChatService 정리
+   */
+  useEffect(() => {
+    return () => {
+      if (chatServiceRef.current) {
+        console.log("[ChatContext] ChatService 리소스 해제");
+        chatServiceRef.current.destroy();
+        chatServiceRef.current = null;
+      }
+    };
+  }, []);
+
+  const value = {
+    chatService: chatServiceRef.current,
+    messages,
+    unreadCount,
+    currentUser,
+    sendMessage,
+    clearUnreadCount,
+  };
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+}
+
+/**
+ * ChatContext를 사용하는 커스텀 훅
+ * @returns {Object} ChatContext 값
+ */
+export function useChatContext() {
+  const context = useContext(ChatContext);
+
+  if (!context) {
+    throw new Error("useChatContext는 ChatProvider 내부에서만 사용할 수 있습니다.");
+  }
+
+  return context;
+}
+
+export default ChatContext;
