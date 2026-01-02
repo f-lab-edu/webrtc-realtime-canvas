@@ -1,11 +1,12 @@
 /**
  * WorkerPoolManager 클래스
- * mediasoup Worker 풀 생성 및 라운드 로빈 분배
+ * mediasoup Worker 풀 생성 및 Least-Connection 분배
  *
  * 책임:
  * - Worker 풀 초기화
- * - 라운드 로빈으로 Worker 분배
+ * - Least-Connection 방식으로 Worker 분배 (Router 수 기준)
  * - Worker 장애 처리 및 재생성
+ * - Worker별 Router 카운트 추적
  *
  * 의존성: 없음 (최하위 모듈)
  *
@@ -29,7 +30,10 @@ class WorkerPoolManager {
     /** @type {Map<number, mediasoup.types.WebRtcServer>} worker.pid → WebRtcServer */
     this.webRtcServers = new Map();
 
-    /** @type {number} 라운드 로빈 인덱스 */
+    /** @type {Map<number, number>} worker.pid → Router 카운트 (Least-Connection용) */
+    this.workerRouterCounts = new Map();
+
+    /** @type {number} 라운드 로빈 인덱스 (deprecated, Least-Connection으로 대체) */
     this.nextWorkerIndex = 0;
 
     /** @type {boolean} 초기화 완료 여부 */
@@ -90,6 +94,9 @@ class WorkerPoolManager {
       // WebRtcServer 정리
       this.webRtcServers.delete(worker.pid);
 
+      // Router 카운트 정리
+      this.workerRouterCounts.delete(worker.pid);
+
       // Worker 풀에서 제거
       const workerIdx = this.workers.indexOf(worker);
       if (workerIdx !== -1) {
@@ -111,23 +118,80 @@ class WorkerPoolManager {
     });
 
     this.workers.push(worker);
+    // Least-Connection: Router 카운트 초기화
+    this.workerRouterCounts.set(worker.pid, 0);
     console.log(`[WorkerPoolManager] Worker ${index} 생성 완료 (PID: ${worker.pid})`);
   }
 
   /**
    * 라운드 로빈으로 다음 Worker 반환
+   * @deprecated getLeastLoadedWorker() 사용 권장
    * @returns {mediasoup.types.Worker}
    */
   getNextWorker() {
+    // Least-Connection 방식으로 위임
+    return this.getLeastLoadedWorker();
+  }
+
+  /**
+   * Least-Connection 방식으로 가장 부하가 적은 Worker 반환
+   * Router 카운트가 가장 적은 Worker 선택
+   * @returns {mediasoup.types.Worker}
+   */
+  getLeastLoadedWorker() {
     if (this.workers.length === 0) {
       throw new Error(
         "[WorkerPoolManager] 사용 가능한 Worker가 없습니다. initialize()를 먼저 호출하세요."
       );
     }
 
-    const worker = this.workers[this.nextWorkerIndex];
-    this.nextWorkerIndex = (this.nextWorkerIndex + 1) % this.workers.length;
-    return worker;
+    let leastLoadedWorker = this.workers[0];
+    let minCount = this.workerRouterCounts.get(leastLoadedWorker.pid) || 0;
+
+    for (const worker of this.workers) {
+      const count = this.workerRouterCounts.get(worker.pid) || 0;
+      if (count < minCount) {
+        minCount = count;
+        leastLoadedWorker = worker;
+      }
+    }
+
+    return leastLoadedWorker;
+  }
+
+  /**
+   * Router 카운트 증가
+   * Router 생성 시 호출
+   * @param {number} workerPid Worker PID
+   */
+  incrementRouterCount(workerPid) {
+    const current = this.workerRouterCounts.get(workerPid) || 0;
+    this.workerRouterCounts.set(workerPid, current + 1);
+    console.log(`[WorkerPoolManager] Worker ${workerPid} Router 카운트: ${current + 1}`);
+  }
+
+  /**
+   * Router 카운트 감소
+   * Router 삭제 시 호출
+   * @param {number} workerPid Worker PID
+   */
+  decrementRouterCount(workerPid) {
+    const current = this.workerRouterCounts.get(workerPid) || 0;
+    if (current > 0) {
+      this.workerRouterCounts.set(workerPid, current - 1);
+      console.log(`[WorkerPoolManager] Worker ${workerPid} Router 카운트: ${current - 1}`);
+    }
+  }
+
+  /**
+   * Worker별 통계 반환 (디버깅/모니터링용)
+   * @returns {Array<{pid: number, routerCount: number}>}
+   */
+  getWorkerStats() {
+    return this.workers.map((worker) => ({
+      pid: worker.pid,
+      routerCount: this.workerRouterCounts.get(worker.pid) || 0,
+    }));
   }
 
   /**
@@ -181,6 +245,7 @@ class WorkerPoolManager {
     }
 
     this.workers = [];
+    this.workerRouterCounts.clear();
     this.nextWorkerIndex = 0;
     this.initialized = false;
 
