@@ -48,14 +48,17 @@ class RouterManager {
       return this.roomRouters.get(roomId);
     }
 
-    const worker = this.workerPoolManager.getNextWorker();
+    const worker = this.workerPoolManager.getLeastLoadedWorker();
     const router = await worker.createRouter(routerOptions);
 
     // Worker 참조 저장 (WebRtcServer 조회용)
     router.appData = { roomId, worker };
 
+    // Least-Connection: Router 카운트 증가
+    this.workerPoolManager.incrementRouterCount(worker.pid);
+
     this.roomRouters.set(roomId, router);
-    console.log(`[RouterManager] Router 생성: roomId=${roomId}`);
+    console.log(`[RouterManager] Router 생성: roomId=${roomId}, workerPid=${worker.pid}`);
 
     return router;
   }
@@ -88,6 +91,12 @@ class RouterManager {
     const router = this.roomRouters.get(roomId);
     if (!router) {
       return;
+    }
+
+    // Least-Connection: Router 카운트 감소
+    const worker = router.appData?.worker;
+    if (worker) {
+      this.workerPoolManager.decrementRouterCount(worker.pid);
     }
 
     // Router를 닫으면 해당 Router의 모든 Transport, Producer, Consumer도 자동 종료됨
