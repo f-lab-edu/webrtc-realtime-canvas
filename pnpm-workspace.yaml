@@ -1,0 +1,8 @@
+allowBuilds:
+  canvas: true
+  mediasoup: true
+  puppeteer: true
+  sharp: true
+  '@biomejs/biome': true
+  unrs-resolver: true
+  v8-profiler-next: false
